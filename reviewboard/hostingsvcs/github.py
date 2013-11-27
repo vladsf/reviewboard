@@ -1,7 +1,7 @@
-import httplib
+from __future__ import unicode_literals
+
 import json
 import logging
-import urllib2
 
 from django import forms
 from django.conf import settings
@@ -9,14 +9,20 @@ from django.contrib.sites.models import Site
 from django.core.cache import cache
 from django.utils.translation import ugettext_lazy as _
 from djblets.siteconfig.models import SiteConfiguration
+from djblets.util.compat import six
+from djblets.util.compat.six.moves import http_client
+from djblets.util.compat.six.moves.urllib.error import HTTPError, URLError
 
 from reviewboard.hostingsvcs.errors import (AuthorizationError,
                                             InvalidPlanError,
-                                            RepositoryError)
+                                            RepositoryError,
+                                            TwoFactorAuthCodeRequiredError)
 from reviewboard.hostingsvcs.forms import HostingServiceForm
 from reviewboard.hostingsvcs.service import HostingService
 from reviewboard.scmtools.core import Branch, Commit
-from reviewboard.scmtools.errors import FileNotFoundError
+from reviewboard.scmtools.errors import (FileNotFoundError,
+                                         InvalidChangeNumberError,
+                                         SCMError)
 from reviewboard.site.urlresolvers import local_site_reverse
 
 
@@ -154,6 +160,7 @@ class GitHub(HostingService):
     supports_bug_trackers = True
     supports_post_commit = True
     supports_repositories = True
+    supports_two_factor_auth = True
     supported_scmtools = ['Git']
 
     # This should be the prefix for every field on the plan forms.
@@ -190,8 +197,8 @@ class GitHub(HostingService):
             repo_info = self._api_get_repository(
                 self._get_repository_owner_raw(plan, kwargs),
                 self._get_repository_name_raw(plan, kwargs))
-        except Exception, e:
-            if str(e) == 'Not Found':
+        except Exception as e:
+            if six.text_type(e) == 'Not Found':
                 if plan in ('public', 'private'):
                     raise RepositoryError(
                         _('A repository with this name was not found, or your '
@@ -221,7 +228,8 @@ class GitHub(HostingService):
                       'a private plan.'))
 
     def authorize(self, username, password, hosting_url,
-                  local_site_name=None, *args, **kwargs):
+                  two_factor_auth_code=None, local_site_name=None,
+                  *args, **kwargs):
         site = Site.objects.get_current()
         siteconfig = SiteConfiguration.objects.get_current()
 
@@ -250,12 +258,18 @@ class GitHub(HostingService):
                     'client_secret': settings.GITHUB_CLIENT_SECRET,
                 })
 
+            headers = {}
+
+            if two_factor_auth_code:
+                headers['X-GitHub-OTP'] = two_factor_auth_code
+
             rsp, headers = self._json_post(
                 url=self.get_api_url(hosting_url) + 'authorizations',
                 username=username,
                 password=password,
+                headers=headers,
                 body=json.dumps(body))
-        except (urllib2.HTTPError, urllib2.URLError), e:
+        except (HTTPError, URLError) as e:
             data = e.read()
 
             try:
@@ -264,9 +278,18 @@ class GitHub(HostingService):
                 rsp = None
 
             if rsp and 'message' in rsp:
+                response_info = e.info()
+                x_github_otp = response_info.get('X-GitHub-OTP', '')
+
+                if x_github_otp.startswith('required;'):
+                    raise TwoFactorAuthCodeRequiredError(
+                        _('Enter your two-factor authentication code '
+                          'and re-enter your password to link your account. '
+                          'This code will be sent to you by GitHub.'))
+
                 raise AuthorizationError(rsp['message'])
             else:
-                raise AuthorizationError(str(e))
+                raise AuthorizationError(six.text_type(e))
 
         self.account.data['authorization'] = rsp
         self.account.save()
@@ -283,7 +306,7 @@ class GitHub(HostingService):
             return self._http_get(url, headers={
                 'Accept': self.RAW_MIMETYPE,
             })[0]
-        except (urllib2.URLError, urllib2.HTTPError):
+        except (URLError, HTTPError):
             raise FileNotFoundError(path, revision)
 
     def get_file_exists(self, repository, path, revision, *args, **kwargs):
@@ -296,7 +319,7 @@ class GitHub(HostingService):
             })
 
             return True
-        except (urllib2.URLError, urllib2.HTTPError):
+        except (URLError, HTTPError):
             return False
 
     def get_branches(self, repository):
@@ -307,7 +330,7 @@ class GitHub(HostingService):
 
         try:
             rsp = self._api_get(url)
-        except Exception, e:
+        except Exception as e:
             logging.warning('Failed to fetch commits from %s: %s',
                             url, e)
             return results
@@ -335,7 +358,7 @@ class GitHub(HostingService):
 
         try:
             rsp = self._api_get(url)
-        except Exception, e:
+        except Exception as e:
             logging.warning('Failed to fetch commits from %s: %s',
                             url, e)
             return results
@@ -369,7 +392,10 @@ class GitHub(HostingService):
             url = self._build_api_url(repo_api_url, 'commits')
             url += '&sha=%s' % revision
 
-            commit = self._api_get(url)[0]
+            try:
+                commit = self._api_get(url)[0]
+            except Exception as e:
+                raise SCMError(six.text_type(e))
 
             author_name = commit['commit']['author']['name']
             date = commit['commit']['committer']['date'],
@@ -379,7 +405,10 @@ class GitHub(HostingService):
         # Step 2: fetch the "compare two commits" API to get the diff.
         url = self._build_api_url(
             repo_api_url, 'compare/%s...%s' % (parent_revision, revision))
-        comparison = self._api_get(url)
+        try:
+            comparison = self._api_get(url)
+        except Exception as e:
+            raise SCMError(six.text_type(e))
 
         tree_sha = comparison['base_commit']['commit']['tree']['sha']
         files = comparison['files']
@@ -399,7 +428,10 @@ class GitHub(HostingService):
         for file in files:
             filename = file['filename']
             status = file['status']
-            patch = file['patch']
+            try:
+                patch = file['patch']
+            except KeyError:
+                continue
 
             diff.append('diff --git a/%s b/%s' % (filename, filename))
 
@@ -443,7 +475,7 @@ class GitHub(HostingService):
         """
         if 'message' not in rsp:
             msg = _('Unknown GitHub API Error')
-        elif 'errors' in rsp and status_code == httplib.UNPROCESSABLE_ENTITY:
+        elif 'errors' in rsp and status_code == http_client.UNPROCESSABLE_ENTITY:
             errors = [e['message'] for e in rsp['errors'] if 'message' in e]
             msg = '%s: (%s)' % (rsp['message'], ', '.join(errors))
         else:
@@ -486,7 +518,7 @@ class GitHub(HostingService):
 
     def _get_repo_api_url_raw(self, owner, repo_name):
         return '%srepos/%s/%s' % (self.get_api_url(self.account.hosting_url),
-                                   owner, repo_name)
+                                  owner, repo_name)
 
     def _get_repository_owner_raw(self, plan, extra_data):
         if plan in ('public', 'private'):
@@ -507,7 +539,7 @@ class GitHub(HostingService):
         try:
             data, headers = self._http_get(url)
             return json.loads(data)
-        except (urllib2.URLError, urllib2.HTTPError), e:
+        except (URLError, HTTPError) as e:
             data = e.read()
 
             try:
@@ -518,4 +550,4 @@ class GitHub(HostingService):
             if rsp and 'message' in rsp:
                 raise Exception(rsp['message'])
             else:
-                raise Exception(str(e))
+                raise Exception(six.text_type(e))

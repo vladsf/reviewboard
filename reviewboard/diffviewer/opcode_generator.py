@@ -1,4 +1,9 @@
+from __future__ import unicode_literals
+
 import re
+
+from djblets.util.compat import six
+from djblets.util.compat.six.moves import range
 
 from reviewboard.diffviewer.processors import (filter_interdiff_opcodes,
                                                merge_adjacent_chunks)
@@ -7,6 +12,9 @@ from reviewboard.diffviewer.processors import (filter_interdiff_opcodes,
 class DiffOpcodeGenerator(object):
     ALPHANUM_RE = re.compile(r'\w')
     WHITESPACE_RE = re.compile(r'\s')
+
+    MOVE_PREFERRED_MIN_LINES = 2
+    MOVE_MIN_LINE_LENGTH = 20
 
     def __init__(self, differ, filediff=None, interfilediff=None):
         self.differ = differ
@@ -63,7 +71,7 @@ class DiffOpcodeGenerator(object):
                 # replace groups are good for whitespace only changes.
                 assert (i2 - i1) == (j2 - j1)
 
-                for i, j in zip(xrange(i1, i2), xrange(j1, j2)):
+                for i, j in zip(range(i1, i2), range(j1, j2)):
                     if (self.WHITESPACE_RE.sub('', self.differ.a[i]) ==
                             self.WHITESPACE_RE.sub('', self.differ.b[j])):
                         # Both original lines are equal when removing all
@@ -87,7 +95,7 @@ class DiffOpcodeGenerator(object):
             # Later, we will loop through the keys and attempt to find insert
             # keys/groups that match remove keys/groups.
             if tag in ('delete', 'replace'):
-                for i in xrange(i1, i2):
+                for i in range(i1, i2):
                     line = self.differ.a[i].strip()
 
                     if line:
@@ -250,16 +258,16 @@ class DiffOpcodeGenerator(object):
                         # only increment i_move_cur by one, because i_move_cur
                         # already factored in the + 1 by being at the end of
                         # the while loop.
-                        i_move_range = range(i_move_range[0] + 1,
-                                             i_move_cur + 1)
-                        r_move_range = range(r_move_range[0] + 1,
-                                             r_move_range[1] + 2)
+                        i_range = range(i_move_range[0] + 1,
+                                        i_move_cur + 1)
+                        r_range = range(r_move_range[0] + 1,
+                                        r_move_range[1] + 2)
 
-                        rmeta = rgroup[-1]
+                        rmeta = r_move_range[2][-1]
                         rmeta.setdefault('moved-to', {}).update(
-                            dict(zip(r_move_range, i_move_range)))
+                            dict(zip(r_range, i_range)))
                         imeta.setdefault('moved-from', {}).update(
-                            dict(zip(i_move_range, r_move_range)))
+                            dict(zip(i_range, r_range)))
 
                 # Reset the state for the next range.
                 prev_key = None
@@ -282,7 +290,7 @@ class DiffOpcodeGenerator(object):
         # problem.
         r_move_range = None
 
-        for iter_move_range in r_move_ranges.itervalues():
+        for iter_move_range in six.itervalues(r_move_ranges):
             if not r_move_range:
                 r_move_range = iter_move_range
             else:
@@ -324,12 +332,23 @@ class DiffOpcodeGenerator(object):
             line = line.strip()
 
             if line:
-                if new_end_i is None:
-                    new_end_i = end_i - i
-
                 if len(line) >= 4 and self.ALPHANUM_RE.search(line):
                     valid = True
+
+                if new_end_i is None or valid:
+                    new_end_i = end_i - i
+
+                if valid:
                     break
+
+        # Accept this if there's more than one line or if the first
+        # line is long enough, in order to filter out small bits of garbage.
+        valid = (
+            valid and
+            (new_end_i - r_move_range[0] + 1 >=
+                 self.MOVE_PREFERRED_MIN_LINES or
+             len(self.differ.a[r_move_range[0]].strip()) >=
+                 self.MOVE_MIN_LINE_LENGTH))
 
         if not valid:
             return None

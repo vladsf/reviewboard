@@ -1,9 +1,11 @@
+from __future__ import unicode_literals
+
 import json
-from urllib import quote
-from urllib2 import HTTPError, URLError
 
 from django import forms
 from django.utils.translation import ugettext_lazy as _
+from djblets.util.compat.six.moves.urllib.error import HTTPError, URLError
+from djblets.util.compat.six.moves.urllib.parse import quote
 
 from reviewboard.hostingsvcs.errors import InvalidPlanError
 from reviewboard.hostingsvcs.forms import HostingServiceForm
@@ -241,7 +243,7 @@ class Bitbucket(HostingService):
                 return data
             else:
                 return json.loads(data)
-        except HTTPError, e:
+        except HTTPError as e:
             # Bitbucket's API documentation doesn't provide any information
             # on an error structure, and the API browser shows that we
             # sometimes get a raw error string, and sometimes raw HTML.

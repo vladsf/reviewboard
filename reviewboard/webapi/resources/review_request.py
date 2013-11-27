@@ -1,9 +1,12 @@
+from __future__ import unicode_literals
+
 import logging
 
 import dateutil.parser
 from django.contrib.auth.models import User
 from django.core.exceptions import PermissionDenied, ObjectDoesNotExist
 from django.db.models import Q
+from djblets.util.compat import six
 from djblets.util.decorators import augment_method_from
 from djblets.webapi.decorators import (webapi_login_required,
                                        webapi_response_errors,
@@ -90,12 +93,12 @@ class ReviewRequestResource(WebAPIResource):
             'description': 'The user who submitted the review request.',
         },
         'time_added': {
-            'type': str,
+            'type': six.text_type,
             'description': 'The date and time that the review request was '
                            'added (in YYYY-MM-DD HH:MM:SS format).',
         },
         'last_updated': {
-            'type': str,
+            'type': six.text_type,
             'description': 'The date and time that the review request was '
                            'last updated (in YYYY-MM-DD HH:MM:SS format).',
         },
@@ -124,7 +127,7 @@ class ReviewRequestResource(WebAPIResource):
                            '``commit_id`` field.',
         },
         'commit_id': {
-            'type': str,
+            'type': six.text_type,
             'description': 'The commit that the review request represents. '
                            'This obsoletes the ``changenum`` field.',
         },
@@ -134,25 +137,25 @@ class ReviewRequestResource(WebAPIResource):
                            "is stored on.",
         },
         'summary': {
-            'type': str,
+            'type': six.text_type,
             'description': "The review request's brief summary.",
         },
         'description': {
-            'type': str,
+            'type': six.text_type,
             'description': "The review request's description.",
         },
         'testing_done': {
-            'type': str,
+            'type': six.text_type,
             'description': 'The information on the testing that was done '
                            'for the change.',
         },
         'bugs_closed': {
-            'type': [str],
+            'type': [six.text_type],
             'description': 'The list of bugs closed or referenced by this '
                            'change.',
         },
         'branch': {
-            'type': str,
+            'type': six.text_type,
             'description': 'The branch that the code was changed on or that '
                            'the code will be committed to. This is a '
                            'free-form field that can store any text.',
@@ -168,8 +171,17 @@ class ReviewRequestResource(WebAPIResource):
                            'this change.',
         },
         'url': {
-            'type': str,
-            'description': "The URL to the review request's page on the site.",
+            'type': six.text_type,
+            'description': "The URL to the review request's page on the site. "
+                           "This is deprecated and will be removed in a "
+                           "future version.",
+            'deprecated_in': '2.0',
+        },
+        'absolute_url': {
+            'type': six.text_type,
+            'description': "The absolute URL to the review request's page on "
+                           "the site.",
+            'added_in': '2.0',
         },
     }
     uri_object_key = 'review_request_id'
@@ -380,7 +392,7 @@ class ReviewRequestResource(WebAPIResource):
         return review_request.is_mutable_by(request.user)
 
     def has_delete_permissions(self, request, review_request, *args, **kwargs):
-        return request.user.has_perm('reviews.delete_reviewrequest')
+        return review_request.is_deletable_by(request.user)
 
     def serialize_bugs_closed_field(self, obj, **kwargs):
         return obj.get_bug_list()
@@ -393,6 +405,9 @@ class ReviewRequestResource(WebAPIResource):
 
     def serialize_url_field(self, obj, **kwargs):
         return obj.get_absolute_url()
+
+    def serialize_absolute_url_field(self, obj, request, **kwargs):
+        return request.build_absolute_uri(obj.get_absolute_url())
 
     def serialize_commit_id_field(self, obj, **kwargs):
         return obj.commit
@@ -416,18 +431,18 @@ class ReviewRequestResource(WebAPIResource):
                                'the ``commit_id`` field.',
             },
             'commit_id': {
-                'type': str,
+                'type': six.text_type,
                 'description': 'The optional commit to create the review '
                                'request for. This can be used in place of '
                                'the ``changenum`` field.',
             },
             'repository': {
-                'type': str,
+                'type': six.text_type,
                 'description': 'The path or ID of the repository that the '
                                'review request is for.',
             },
             'submit_as': {
-                'type': str,
+                'type': six.text_type,
                 'description': 'The optional user to submit the review '
                                'request as. This requires that the actual '
                                'logged in user is either a superuser or has '
@@ -471,10 +486,11 @@ class ReviewRequestResource(WebAPIResource):
         local_site = self._get_local_site(local_site_name)
 
         if changenum is not None and commit_id is None:
-            commit_id = str(changenum)
+            commit_id = six.text_type(changenum)
 
         if submit_as and user.username != submit_as:
-            if not user.has_perm('reviews.can_submit_as_another_user'):
+            if not user.has_perm('reviews.can_submit_as_another_user',
+                                 local_site):
                 return self._no_access_error(request.user)
 
             try:
@@ -494,7 +510,7 @@ class ReviewRequestResource(WebAPIResource):
                          Q(mirror_path=repository) |
                          Q(name=repository)) &
                         Q(local_site=local_site))
-            except Repository.DoesNotExist, e:
+            except Repository.DoesNotExist as e:
                 return INVALID_REPOSITORY, {
                     'repository': repository
                 }
@@ -513,7 +529,7 @@ class ReviewRequestResource(WebAPIResource):
             return REPO_AUTHENTICATION_ERROR
         except RepositoryNotFoundError:
             return MISSING_REPOSITORY
-        except ChangeNumberInUseError, e:
+        except ChangeNumberInUseError as e:
             return CHANGE_NUMBER_IN_USE, {
                 'review_request': e.review_request
             }
@@ -525,17 +541,17 @@ class ReviewRequestResource(WebAPIResource):
             return DIFF_TOO_BIG
         except EmptyDiffError:
             return DIFF_EMPTY
-        except DiffParserError, e:
+        except DiffParserError as e:
             return DIFF_PARSE_ERROR, {
                 'linenum': e.linenum,
-                'message': str(e),
+                'message': six.text_type(e),
             }
-        except SSHError, e:
+        except SSHError as e:
             logging.error("Got unexpected SSHError when creating "
                           "repository: %s"
                           % e, exc_info=1, request=request)
             return REPO_INFO_ERROR
-        except SCMError, e:
+        except SCMError as e:
             logging.error("Got unexpected SCMError when creating "
                           "repository: %s"
                           % e, exc_info=1, request=request)
@@ -564,7 +580,7 @@ class ReviewRequestResource(WebAPIResource):
                                '``commit_id`` field.',
             },
             'commit_id': {
-                'type': str,
+                'type': six.text_type,
                 'description': 'The commit to set or update. This can be used '
                                'to re-associate with a new commit ID, or to '
                                'create/update a draft with new information '
@@ -574,7 +590,7 @@ class ReviewRequestResource(WebAPIResource):
                                '``changenum`` field.',
             },
             'description': {
-                'type': str,
+                'type': six.text_type,
                 'description': 'The description of the update. Should only be '
                                'used if the review request have been '
                                'submitted or discarded.',
@@ -608,7 +624,10 @@ class ReviewRequestResource(WebAPIResource):
         except ObjectDoesNotExist:
             return DOES_NOT_EXIST
 
-        if not self.has_modify_permissions(request, review_request):
+        if ((changenum is not None and
+             not self.has_modify_permissions(request, review_request)) or
+            (status is not None and
+             not review_request.is_status_mutable_by(request.user))):
             return self._no_access_error(request.user)
 
         if (status is not None and
@@ -627,7 +646,7 @@ class ReviewRequestResource(WebAPIResource):
                 return self._no_access_error(request.user)
 
         if changenum is not None and commit_id is None:
-            commit_id = str(changenum)
+            commit_id = six.text_type(changenum)
 
         if commit_id is not None:
             if commit_id != review_request.commit:
@@ -681,28 +700,28 @@ class ReviewRequestResource(WebAPIResource):
                                'the ``commit_id`` field.',
             },
             'commit_id': {
-                'type': str,
+                'type': six.text_type,
                 'description': 'The commit that review requests must have '
                                'set. This will only return one review request '
                                'per repository. This obsoletes the '
                                '``changenum`` field.',
             },
             'time-added-to': {
-                'type': str,
+                'type': six.text_type,
                 'description': 'The date/time that all review requests must '
                                'be added before. This is compared against the '
                                'review request\'s ``time_added`` field. This '
                                'must be a valid :term:`date/time format`.',
             },
             'time-added-from': {
-                'type': str,
+                'type': six.text_type,
                 'description': 'The earliest date/time the review request '
                                'could be added. This is compared against the '
                                'review request\'s ``time_added`` field. This '
                                'must be a valid :term:`date/time format`.',
             },
             'last-updated-to': {
-                'type': str,
+                'type': six.text_type,
                 'description': 'The date/time that all review requests must '
                                'be last updated before. This is compared '
                                'against the review request\'s '
@@ -710,7 +729,7 @@ class ReviewRequestResource(WebAPIResource):
                                ':term:`date/time format`.',
             },
             'last-updated-from': {
-                'type': str,
+                'type': six.text_type,
                 'description': 'The earliest date/time the review request '
                                'could be last updated. This is compared '
                                'against the review request\'s '
@@ -718,7 +737,7 @@ class ReviewRequestResource(WebAPIResource):
                                ':term:`date/time format`.',
             },
             'from-user': {
-                'type': str,
+                'type': six.text_type,
                 'description': 'The username that the review requests must '
                                'be owned by.',
             },
@@ -739,26 +758,26 @@ class ReviewRequestResource(WebAPIResource):
                 'description': 'The status of the review requests.'
             },
             'to-groups': {
-                'type': str,
+                'type': six.text_type,
                 'description': 'A comma-separated list of review group names '
                                'that the review requests must have in the '
                                'reviewer list.',
             },
             'to-user-groups': {
-                'type': str,
+                'type': six.text_type,
                 'description': 'A comma-separated list of usernames who are '
                                'in groups that the review requests must have '
                                'in the reviewer list.',
             },
             'to-users': {
-                'type': str,
+                'type': six.text_type,
                 'description': 'A comma-separated list of usernames that the '
                                'review requests must either have in the '
                                'reviewer list specifically or by way of '
                                'a group.',
             },
             'to-users-directly': {
-                'type': str,
+                'type': six.text_type,
                 'description': 'A comma-separated list of usernames that the '
                                'review requests must have in the reviewer '
                                'list specifically.',

@@ -1,3 +1,5 @@
+from __future__ import unicode_literals
+
 from reviewboard.webapi.tests.mixins import test_template
 
 
@@ -58,8 +60,8 @@ class ReviewItemMixin(object):
             True,
             '`This` is **body_top**',
             '`This` is **body_bottom**',
-            '\\`This\\` is \\*\\*body\\_top\\*\\*',
-            '\\`This\\` is \\*\\*body\\_bottom\\*\\*')
+            r'\`This\` is \*\*body\_top\*\*',
+            r'\`This\` is \*\*body\_bottom\*\*')
 
     @test_template
     def test_put_with_rich_text_false_escaping_all_fields(self):
@@ -68,8 +70,8 @@ class ReviewItemMixin(object):
         """
         self._test_put_with_rich_text_escaping_all_fields(
             False,
-            '\\`This\\` is \\*\\*body\\_top\\*\\*',
-            '\\`This\\` is \\*\\*body\\_bottom\\*\\*',
+            r'\`This\` is \*\*body\_top\*\*',
+            r'\`This\` is \*\*body\_bottom\*\*',
             '`This` is **body_top**',
             '`This` is **body_bottom**')
 
@@ -81,7 +83,7 @@ class ReviewItemMixin(object):
         self._test_put_with_rich_text_escaping_unspecified_fields(
             True,
             '`This` is **body_top**',
-            '\\`This\\` is \\*\\*body\\_top\\*\\*')
+            r'\`This\` is \*\*body\_top\*\*')
 
     @test_template
     def test_put_with_rich_text_false_escaping_unspecified_fields(self):
@@ -90,8 +92,38 @@ class ReviewItemMixin(object):
         """
         self._test_put_with_rich_text_escaping_unspecified_fields(
             False,
-            '\\`This\\` is \\*\\*body\\_top\\*\\*',
+            r'\`This\` is \*\*body\_top\*\*',
             '`This` is **body_top**')
+
+    @test_template
+    def test_put_without_rich_text_and_escaping_provided_fields(self):
+        """Testing the PUT <URL> API
+        without changing rich_text and with escaping provided fields
+        """
+        url, mimetype, data, review, objs = \
+            self.setup_basic_put_test(self.user, False, None, True)
+        review.rich_text = True
+        review.save()
+
+        if 'rich_text' in data:
+            del data['rich_text']
+
+        data.update({
+            'body_top': '`This` is **body_top**',
+            'body_bottom': '`This` is **body_bottom**',
+        })
+
+        rsp = self.apiPut(url, data, expected_mimetype=mimetype)
+
+        self.assertEqual(rsp['stat'], 'ok')
+        review_rsp = rsp[self.resource.item_result_key]
+        self.assertTrue(review_rsp['rich_text'])
+        self.assertEqual(review_rsp['body_top'],
+                         r'\`This\` is \*\*body\_top\*\*')
+        self.assertEqual(review_rsp['body_bottom'],
+                         r'\`This\` is \*\*body\_bottom\*\*')
+        self.compare_item(review_rsp,
+                          self.resource.model.objects.get(pk=review_rsp['id']))
 
     def _test_put_with_rich_text_all_fields(self, rich_text):
         body_top = '`This` is **body_top**'

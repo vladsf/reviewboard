@@ -1,3 +1,5 @@
+from __future__ import unicode_literals
+
 from reviewboard.webapi.tests.mixins import test_template
 
 
@@ -57,7 +59,7 @@ class BaseCommentItemMixin(object):
         self._test_put_with_rich_text_and_not_text(
             True,
             '`Test` **diff** comment',
-            '\\`Test\\` \\*\\*diff\\*\\* comment')
+            r'\`Test\` \*\*diff\*\* comment')
 
     @test_template
     def test_put_with_rich_text_false_and_not_text(self):
@@ -66,8 +68,35 @@ class BaseCommentItemMixin(object):
         """
         self._test_put_with_rich_text_and_not_text(
             False,
-            '\\`Test\\` \\*\\*diff\\*\\* comment',
+            r'\`Test\` \*\*diff\*\* comment',
             '`Test` **diff** comment')
+
+    @test_template
+    def test_put_without_rich_text_and_escaping_provided_fields(self):
+        """Testing the PUT <URL> API
+        without changing rich_text and with escaping provided fields
+        """
+        url, mimetype, data, reply_comment, objs = \
+            self.setup_basic_put_test(self.user, False, None, True)
+        reply_comment.rich_text = True
+        reply_comment.save()
+
+        if 'rich_text' in data:
+            del data['rich_text']
+
+        data.update({
+            'text': '`This` is **text**',
+        })
+
+        rsp = self.apiPut(url, data, expected_mimetype=mimetype)
+
+        self.assertEqual(rsp['stat'], 'ok')
+        comment_rsp = rsp[self.resource.item_result_key]
+        self.assertTrue(comment_rsp['rich_text'])
+        self.assertEqual(comment_rsp['text'], '\\`This\\` is \\*\\*text\\*\\*')
+
+        comment = self.resource.model.objects.get(pk=comment_rsp['id'])
+        self.compare_item(comment_rsp, comment)
 
     def _test_put_with_rich_text_and_text(self, rich_text):
         comment_text = '`Test` **diff** comment'

@@ -1,5 +1,8 @@
+from __future__ import unicode_literals
+
+from djblets.db.query import get_object_or_none
 from djblets.testing.decorators import add_fixtures
-from djblets.util.misc import get_object_or_none
+from djblets.util.compat import six
 from djblets.webapi.errors import PERMISSION_DENIED
 
 from reviewboard.reviews.models import Group, ReviewRequest
@@ -14,10 +17,9 @@ from reviewboard.webapi.tests.urls import (get_review_group_item_url,
                                            get_review_group_list_url)
 
 
+@six.add_metaclass(BasicTestsMetaclass)
 class ResourceListTests(BaseWebAPITestCase):
     """Testing the ReviewGroupResource list APIs."""
-    __metaclass__ = BasicTestsMetaclass
-
     fixtures = ['test_users']
     sample_api_url = 'groups/'
     resource = resources.review_group
@@ -30,6 +32,8 @@ class ResourceListTests(BaseWebAPITestCase):
         self.assertEqual(item_rsp['mailing_list'], group.mailing_list)
         self.assertEqual(item_rsp['visible'], group.visible)
         self.assertEqual(item_rsp['invite_only'], group.invite_only)
+        self.assertEqual(item_rsp['absolute_url'],
+                         self.base_url + group.get_absolute_url())
 
     #
     # HTTP GET tests
@@ -146,10 +150,9 @@ class ResourceListTests(BaseWebAPITestCase):
         self.assertEqual(rsp['err']['code'], GROUP_ALREADY_EXISTS.code)
 
 
+@six.add_metaclass(BasicTestsMetaclass)
 class ResourceItemTests(BaseWebAPITestCase):
     """Testing the ReviewGroupResource item APIs."""
-    __metaclass__ = BasicTestsMetaclass
-
     fixtures = ['test_users']
     sample_api_url = 'groups/<id>/'
     resource = resources.review_group

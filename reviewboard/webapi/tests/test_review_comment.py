@@ -1,4 +1,7 @@
+from __future__ import unicode_literals
+
 from django.contrib.auth.models import User
+from djblets.util.compat import six
 from djblets.webapi.errors import PERMISSION_DENIED
 
 from reviewboard.reviews.models import Comment
@@ -75,11 +78,10 @@ class BaseResourceTestCase(BaseWebAPITestCase):
         return review
 
 
+@six.add_metaclass(BasicTestsMetaclass)
 class ResourceListTests(CommentListMixin, ReviewRequestChildListMixin,
                         BaseResourceTestCase):
     """Testing the ReviewDiffCommentResource list APIs."""
-    __metaclass__ = BasicTestsMetaclass
-
     fixtures = ['test_users', 'test_scmtools']
     sample_api_url = 'review-requests/<id>/reviews/<id>/diff-comments/'
     resource = resources.review_diff_comment
@@ -296,11 +298,10 @@ class ResourceListTests(CommentListMixin, ReviewRequestChildListMixin,
                          extra_fields['extra_data.bar'])
 
 
+@six.add_metaclass(BasicTestsMetaclass)
 class ResourceItemTests(CommentItemMixin, ReviewRequestChildItemMixin,
                         BaseResourceTestCase):
     """Testing the ReviewDiffCommentResource item APIs."""
-    __metaclass__ = BasicTestsMetaclass
-
     fixtures = ['test_users', 'test_scmtools']
     sample_api_url = 'review-requests/<id>/reviews/<id>/diff-comments/'
     resource = resources.review_diff_comment
@@ -574,6 +575,6 @@ class ResourceItemTests(CommentItemMixin, ReviewRequestChildItemMixin,
         self.assertTrue('foo' in comment.extra_data)
         self.assertFalse('bar' in comment.extra_data)
         self.assertFalse('ignored' in comment.extra_data)
-        self.assertEqual(len(comment.extra_data.keys()), 1)
+        self.assertEqual(len(comment.extra_data), 1)
         self.assertEqual(comment.extra_data['foo'],
                          extra_fields['extra_data.foo'])

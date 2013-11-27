@@ -1,10 +1,13 @@
+from __future__ import unicode_literals
+
 import hashlib
 import logging
 
 from django.db import models
 from django.utils import timezone
+from django.utils.encoding import python_2_unicode_compatible
 from django.utils.translation import ugettext_lazy as _
-from djblets.util.fields import Base64Field
+from djblets.db.fields import Base64Field
 
 from reviewboard.diffviewer.managers import FileDiffDataManager, DiffSetManager
 from reviewboard.scmtools.core import PRE_CREATION
@@ -48,6 +51,7 @@ class FileDiffData(models.Model):
             self.save()
 
 
+@python_2_unicode_compatible
 class FileDiff(models.Model):
     """
     A diff of a single file.
@@ -231,11 +235,12 @@ class FileDiff(models.Model):
         diff_hash.recalculate_line_counts(
             self.diffset.repository.get_scmtool())
 
-    def __unicode__(self):
-        return u"%s (%s) -> %s (%s)" % (self.source_file, self.source_revision,
-                                        self.dest_file, self.dest_detail)
+    def __str__(self):
+        return "%s (%s) -> %s (%s)" % (self.source_file, self.source_revision,
+                                       self.dest_file, self.dest_detail)
 
 
+@python_2_unicode_compatible
 class DiffSet(models.Model):
     """
     A revisioned collection of FileDiffs.
@@ -283,14 +288,15 @@ class DiffSet(models.Model):
 
         super(DiffSet, self).save()
 
-    def __unicode__(self):
-        return u"[%s] %s r%s" % (self.id, self.name, self.revision)
+    def __str__(self):
+        return "[%s] %s r%s" % (self.id, self.name, self.revision)
 
     class Meta:
         get_latest_by = 'revision'
         ordering = ['revision', 'timestamp']
 
 
+@python_2_unicode_compatible
 class DiffSetHistory(models.Model):
     """
     A collection of diffsets.
@@ -306,8 +312,8 @@ class DiffSetHistory(models.Model):
         null=True,
         default=None)
 
-    def __unicode__(self):
-        return u'Diff Set History (%s revisions)' % self.diffsets.count()
+    def __str__(self):
+        return 'Diff Set History (%s revisions)' % self.diffsets.count()
 
     class Meta:
         verbose_name_plural = "Diff set histories"

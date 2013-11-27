@@ -1,3 +1,5 @@
+from __future__ import unicode_literals
+
 import os
 
 from django.conf import settings
@@ -29,11 +31,6 @@ urlpatterns = patterns(
     (r'^admin/extensions/', include('djblets.extensions.urls'),
      {'extension_manager': extension_manager}),
     (r'^admin/', include('reviewboard.admin.urls')),
-)
-
-
-urlpatterns += patterns(
-    '',
 
     url(r'^jsi18n/', 'djblets.util.views.cached_javascript_catalog',
         {'packages': ('reviewboard',)}, name='js-catalog')
@@ -102,9 +99,9 @@ localsite_urlpatterns = patterns(
     # Users
     url(r'^users/$',
         'reviewboard.reviews.views.submitter_list', name="all-users"),
-    url(r'^users/(?P<username>[A-Za-z0-9@_\-\.]+)/$',
+    url(r"^users/(?P<username>[A-Za-z0-9@_\-\.']+)/$",
         'reviewboard.reviews.views.submitter', name="user"),
-    url(r'^users/(?P<username>[A-Za-z0-9@_\-\.]+)/infobox/$',
+    url(r"^users/(?P<username>[A-Za-z0-9@_\-\.']+)/infobox/$",
         'reviewboard.reviews.views.user_infobox', name="user-infobox"),
 
     # Groups
@@ -128,12 +125,3 @@ urlpatterns += patterns(
 )
 
 urlpatterns += localsite_urlpatterns
-
-
-# django.contrib
-urlpatterns += patterns(
-    'django.contrib',
-
-    url(r'^account/logout/$', 'auth.views.logout',
-        {'next_page': settings.LOGIN_URL}, name="logout")
-)

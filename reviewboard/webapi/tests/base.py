@@ -1,3 +1,5 @@
+from __future__ import print_function, unicode_literals
+
 import json
 import os
 
@@ -5,6 +7,7 @@ from django.conf import settings
 from django.contrib.auth.models import User
 from django.core import mail
 from django.test.client import BOUNDARY, MULTIPART_CONTENT, encode_multipart
+from django.utils import six
 from djblets.siteconfig.models import SiteConfiguration
 
 from reviewboard import initialize
@@ -72,9 +75,10 @@ class BaseWebAPITestCase(TestCase, EmailTestHelper):
                          follow_redirects, expected_redirects,
                          expected_mimetype, content_type='', extra={}):
         response = api_func(path, query, follow=follow_redirects,
-                            content_type=content_type, extra=extra)
+                            content_type=content_type, extra=extra,
+                            HTTP_X_REQUESTED_WITH='XMLHttpRequest')
 
-        print "Raw response: %s" % response.content
+        print("Raw response: %s" % response.content)
 
         self.assertEqual(response.status_code, expected_status)
 
@@ -102,17 +106,15 @@ class BaseWebAPITestCase(TestCase, EmailTestHelper):
                expected_headers={}, expected_mimetype=None):
         path = self._normalize_path(path)
 
-        print 'GETing %s' % path
-        print "Query data: %s" % query
+        print('GETing %s' % path)
+        print("Query data: %s" % query)
 
         response = self.api_func_wrapper(
             self.client.get, path, query, expected_status, follow_redirects,
             expected_redirects, expected_mimetype,
             content_type='text/html; charset=utf-8')
 
-        print "Raw response: %s" % response.content
-
-        for header, value in expected_headers.iteritems():
+        for header, value in six.iteritems(expected_headers):
             self.assertTrue(header in response)
             self.assertEqual(response[header], value)
 
@@ -121,7 +123,7 @@ class BaseWebAPITestCase(TestCase, EmailTestHelper):
         else:
             rsp = json.loads(response.content)
 
-        print "Response: %s" % rsp
+        print("Response: %s" % rsp)
 
         return rsp
 
@@ -129,11 +131,11 @@ class BaseWebAPITestCase(TestCase, EmailTestHelper):
                                expected_mimetype=None):
         path = self._normalize_path(path)
 
-        print 'POSTing to %s' % path
-        print "Post data: %s" % query
+        print('POSTing to %s' % path)
+        print("Post data: %s" % query)
         response = self.client.post(path, query,
                                     HTTP_X_REQUESTED_WITH='XMLHttpRequest')
-        print "Raw response: %s" % response.content
+        print("Raw response: %s" % response.content)
         self.assertEqual(response.status_code, expected_status)
 
         if expected_status >= 400:
@@ -157,24 +159,23 @@ class BaseWebAPITestCase(TestCase, EmailTestHelper):
                expected_mimetype=None):
         path = self._normalize_path(path)
 
-        print 'PUTing to %s' % path
-        print "Post data: %s" % query
+        print('PUTing to %s' % path)
+        print("Post data: %s" % query)
         data = encode_multipart(BOUNDARY, query)
 
         response = self.api_func_wrapper(self.client.put, path, data,
                                          expected_status, follow_redirects,
                                          expected_redirects, expected_mimetype,
                                          content_type=MULTIPART_CONTENT)
-        print "Raw response: %s" % response.content
 
         return self._get_result(response, expected_status)
 
     def apiDelete(self, path, expected_status=204):
         path = self._normalize_path(path)
 
-        print 'DELETEing %s' % path
+        print('DELETEing %s' % path)
         response = self.client.delete(path)
-        print "Raw response: %s" % response.content
+        print("Raw response: %s" % response.content)
         self.assertEqual(response.status_code, expected_status)
 
         return self._get_result(response, expected_status)
@@ -202,7 +203,7 @@ class BaseWebAPITestCase(TestCase, EmailTestHelper):
         headers = {}
 
         if check_etags:
-            headers['If-None-Match'] = response['ETag']
+            headers['HTTP_IF_NONE_MATCH'] = response['ETag']
 
         if check_last_modified:
             headers['HTTP_IF_MODIFIED_SINCE'] = response['Last-Modified']
@@ -223,7 +224,7 @@ class BaseWebAPITestCase(TestCase, EmailTestHelper):
             rsp = None
         else:
             rsp = json.loads(response.content)
-            print "Response: %s" % rsp
+            print("Response: %s" % rsp)
 
         return rsp
 
@@ -342,7 +343,7 @@ class BaseWebAPITestCase(TestCase, EmailTestHelper):
 
         self.apiDelete(
             get_screenshot_list_url(review_request, local_site_name) +
-            str(screenshot.id) + '/')
+            six.text_type(screenshot.id) + '/')
 
     def _postNewFileAttachmentComment(self, review_request, review_id,
                                       file_attachment, comment_text,

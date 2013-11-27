@@ -1,3 +1,5 @@
+from __future__ import unicode_literals
+
 import os
 import re
 import subprocess
@@ -356,10 +358,8 @@ class ClearCaseDynamicViewClient(object):
         self.path = path
 
     def cat_file(self, filename, revision):
-        f = open(filename, 'r')
-        lines = f.readlines()
-        f.close()
-        return ''.join(lines)
+        with open(filename, 'rb') as f:
+            return f.read()
 
     def list_dir(self, path, revision):
         return ''.join([
@@ -393,9 +393,7 @@ class ClearCaseSnapshotViewClient(object):
             raise FileNotFoundError(extended_path, revision)
 
         try:
-            fp = open(temp.name, 'r')
-            data = fp.read()
-            fp.close()
-            return data
+            with open(temp.name, 'rb') as f:
+                return f.read()
         except:
             raise FileNotFoundError(extended_path, revision)

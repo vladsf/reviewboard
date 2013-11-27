@@ -1,3 +1,5 @@
+from __future__ import unicode_literals
+
 from django import forms
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
@@ -52,12 +54,12 @@ class ReviewRequestVisitAdmin(admin.ModelAdmin):
 
 
 class ProfileAdmin(admin.ModelAdmin):
-    list_display = ('__unicode__', 'first_time_setup_done')
+    list_display = ('__str__', 'first_time_setup_done')
     raw_id_fields = ('user', 'starred_review_requests', 'starred_groups')
 
 
 class LocalSiteProfileAdmin(admin.ModelAdmin):
-    list_display = ('__unicode__',)
+    list_display = ('__str__',)
     raw_id_fields = ('user', 'profile', 'local_site')
 
 

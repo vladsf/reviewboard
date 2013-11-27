@@ -1,3 +1,5 @@
+from __future__ import unicode_literals
+
 from reviewboard.site.urlresolvers import local_site_reverse
 from reviewboard.webapi.resources import resources
 
@@ -46,6 +48,23 @@ def get_diff_item_url(review_request, diff_revision, local_site_name=None):
         local_site_name=local_site_name,
         review_request_id=review_request.display_id,
         diff_revision=diff_revision)
+
+
+#
+# DiffFileAttachmentResource
+#
+def get_diff_file_attachment_list_url(repository, local_site_name=None):
+    return resources.diff_file_attachment.get_list_url(
+        local_site_name=local_site_name,
+        repository_id=repository.pk)
+
+
+def get_diff_file_attachment_item_url(attachment, repository,
+                                      local_site_name=None):
+    return resources.diff_file_attachment.get_item_url(
+        local_site_name=local_site_name,
+        repository_id=repository.pk,
+        file_attachment_id=attachment.pk)
 
 
 #
@@ -135,6 +154,24 @@ def get_file_attachment_comment_item_url(file_attachment, comment_id,
         file_attachment_id=file_attachment.pk,
         review_request_id=file_attachment.review_request.get().display_id,
         comment_id=comment_id)
+
+
+#
+# FileDiffResource
+#
+def get_filediff_list_url(diffset, review_request, local_site_name=None):
+    return resources.filediff.get_list_url(
+        local_site_name=local_site_name,
+        review_request_id=review_request.display_id,
+        diff_revision=filediff.diffset.revision)
+
+
+def get_filediff_item_url(filediff, review_request, local_site_name=None):
+    return resources.filediff.get_item_url(
+        local_site_name=local_site_name,
+        review_request_id=review_request.display_id,
+        diff_revision=filediff.diffset.revision,
+        filediff_id=filediff.pk)
 
 
 #

@@ -1,12 +1,15 @@
-from urllib import quote as urllib_quote
+from __future__ import unicode_literals
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.http import HttpResponse
+from djblets.util.compat import six
+from djblets.util.compat.six.moves.urllib.parse import quote as urllib_quote
 from djblets.util.decorators import augment_method_from
 from djblets.util.http import get_http_requested_mimetype, set_last_modified
 from djblets.webapi.core import WebAPIResponse
 from djblets.webapi.errors import DOES_NOT_EXIST
 
+from reviewboard.attachments.models import FileAttachment
 from reviewboard.diffviewer.diffutils import (get_diff_files,
                                               populate_diff_chunks)
 from reviewboard.diffviewer.models import FileDiff
@@ -14,6 +17,8 @@ from reviewboard.webapi.base import CUSTOM_MIMETYPE_BASE, WebAPIResource
 from reviewboard.webapi.decorators import (webapi_check_login_required,
                                            webapi_check_local_site)
 from reviewboard.webapi.resources import resources
+from reviewboard.webapi.resources.diff_file_attachment import \
+    DiffFileAttachmentResource
 
 
 class FileDiffResource(WebAPIResource):
@@ -30,25 +35,37 @@ class FileDiffResource(WebAPIResource):
             'description': 'The numeric ID of the file diff.',
         },
         'source_file': {
-            'type': str,
+            'type': six.text_type,
             'description': 'The original name of the modified file in the '
                            'diff.',
         },
         'dest_file': {
-            'type': str,
+            'type': six.text_type,
             'description': 'The new name of the patched file. This may be '
                            'the same as the existing file.',
         },
         'source_revision': {
-            'type': str,
+            'type': six.text_type,
             'description': 'The revision of the file being modified. This '
                            'is a valid revision in the repository.',
         },
         'dest_detail': {
-            'type': str,
+            'type': six.text_type,
             'description': 'Additional information of the destination file. '
                            'This is parsed from the diff, but is usually '
                            'not used for anything.',
+        },
+        'source_attachment': {
+            'type': DiffFileAttachmentResource,
+            'description': "The file attachment for the contents of the "
+                           "original file for this file diff, if representing "
+                           "a binary file.",
+        },
+        'dest_attachment': {
+            'type': DiffFileAttachmentResource,
+            'description': "The file attachment for the contents of the "
+                           "patched file for this file diff, if representing "
+                           "a binary file.",
         },
     }
     item_child_resources = [
@@ -69,6 +86,20 @@ class FileDiffResource(WebAPIResource):
         {'item': DIFF_DATA_MIMETYPE_JSON},
         {'item': DIFF_DATA_MIMETYPE_XML},
     ]
+
+    def serialize_source_attachment_field(self, filediff, **kwargs):
+        try:
+            return FileAttachment.objects.get_for_filediff(filediff,
+                                                           modified=False)
+        except FileAttachment.DoesNotExist:
+            return None
+
+    def serialize_dest_attachment_field(self, filediff, **kwargs):
+        try:
+            return FileAttachment.objects.get_for_filediff(filediff,
+                                                           modified=True)
+        except FileAttachment.DoesNotExist:
+            return None
 
     def get_last_modified(self, request, obj, *args, **kwargs):
         return obj.diffset.timestamp

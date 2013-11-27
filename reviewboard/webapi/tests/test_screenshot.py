@@ -1,3 +1,6 @@
+from __future__ import unicode_literals
+
+from djblets.util.compat import six
 from djblets.webapi.errors import PERMISSION_DENIED
 
 from reviewboard.webapi.resources import resources
@@ -11,10 +14,9 @@ from reviewboard.webapi.tests.urls import (get_screenshot_list_url,
                                            get_screenshot_item_url)
 
 
+@six.add_metaclass(BasicTestsMetaclass)
 class ResourceListTests(ReviewRequestChildListMixin, BaseWebAPITestCase):
     """Testing the ScreenshotResource list APIs."""
-    __metaclass__ = BasicTestsMetaclass
-
     fixtures = ['test_users']
     sample_api_url = 'review-requests/<id>/screenshots/'
     resource = resources.screenshot
@@ -108,10 +110,9 @@ class ResourceListTests(ReviewRequestChildListMixin, BaseWebAPITestCase):
         self.assertEqual(rsp['err']['code'], PERMISSION_DENIED.code)
 
 
+@six.add_metaclass(BasicTestsMetaclass)
 class ResourceItemTests(ReviewRequestChildItemMixin, BaseWebAPITestCase):
     """Testing the ScreenshotResource item APIs."""
-    __metaclass__ = BasicTestsMetaclass
-
     fixtures = ['test_users']
     sample_api_url = 'review-requests/<id>/screenshots/<id>/'
     resource = resources.screenshot
@@ -125,6 +126,8 @@ class ResourceItemTests(ReviewRequestChildItemMixin, BaseWebAPITestCase):
     def compare_item(self, item_rsp, comment):
         self.assertEqual(item_rsp['id'], comment.pk)
         self.assertEqual(item_rsp['caption'], comment.caption)
+        self.assertEqual(item_rsp['absolute_url'],
+                         self.base_url + comment.image.url)
 
     #
     # HTTP DELETE tests

@@ -1,3 +1,6 @@
+from __future__ import unicode_literals
+
+
 class HostingServiceError(Exception):
     """Base class for errors related to a hosting service."""
     pass
@@ -9,6 +12,17 @@ class RepositoryError(HostingServiceError):
 
 
 class AuthorizationError(HostingServiceError):
+    pass
+
+
+class TwoFactorAuthCodeRequiredError(AuthorizationError):
+    """Response from a service indicating a two-factor auth code is required.
+
+    Some services will indicate, after an authorization attempt, that a
+    two-factor authorization code must be provided to complete authorization.
+    Services can raise this error, along with a helpful message, to
+    inform the user and the repository form of this.
+    """
     pass
 
 

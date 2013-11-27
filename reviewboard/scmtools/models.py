@@ -1,12 +1,15 @@
+from __future__ import unicode_literals
+
 from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.core.exceptions import ImproperlyConfigured
 from django.db import models
+from django.utils.encoding import python_2_unicode_compatible
 from django.utils.http import urlquote
 from django.utils.translation import ugettext_lazy as _
+from djblets.cache.backend import cache_memoize, make_cache_key
+from djblets.db.fields import JSONField
 from djblets.log import log_timed
-from djblets.util.fields import JSONField
-from djblets.util.misc import cache_memoize, make_cache_key
 
 from reviewboard.hostingsvcs.models import HostingServiceAccount
 from reviewboard.scmtools.managers import RepositoryManager, ToolManager
@@ -16,6 +19,7 @@ from reviewboard.scmtools.signals import (checked_file_exists,
 from reviewboard.site.models import LocalSite
 
 
+@python_2_unicode_compatible
 class Tool(models.Model):
     name = models.CharField(max_length=32, unique=True)
     class_name = models.CharField(max_length=128, unique=True)
@@ -36,7 +40,7 @@ class Tool(models.Model):
     field_help_text = property(
         lambda x: x.scmtool_class.field_help_text)
 
-    def __unicode__(self):
+    def __str__(self):
         return self.name
 
     def get_scmtool_class(self):
@@ -47,7 +51,7 @@ class Tool(models.Model):
 
             try:
                 mod = __import__(module, {}, {}, [attr])
-            except ImportError, e:
+            except ImportError as e:
                 raise ImproperlyConfigured(
                     'Error importing SCM Tool %s: "%s"' % (module, e))
 
@@ -65,6 +69,7 @@ class Tool(models.Model):
         ordering = ("name",)
 
 
+@python_2_unicode_compatible
 class Repository(models.Model):
     name = models.CharField(max_length=64)
     path = models.CharField(max_length=255)
@@ -289,12 +294,11 @@ class Repository(models.Model):
 
         The repository is mutable by the user if the user is an administrator
         with proper permissions or the repository is part of a LocalSite and
-        the user is in the admin list.
+        the user has permissions to modify it.
         """
-        return (user.has_perm('scmtools.change_repository') or
-                (self.local_site and self.local_site.is_mutable_by(user)))
+        return user.has_perm('scmtools.change_repository', self.local_site)
 
-    def __unicode__(self):
+    def __str__(self):
         return self.name
 
     def _make_file_cache_key(self, path, revision, base_commit_id):

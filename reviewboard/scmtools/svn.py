@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
+from __future__ import unicode_literals
+
 import datetime
 import logging
 import os
 import re
-import urllib
-import urlparse
 import weakref
 from shutil import rmtree
 from tempfile import mkdtemp
@@ -14,9 +14,11 @@ try:
                        SVN_DIRENT_CREATED_REV)
 except ImportError:
     pass
-
 from django.core.cache import cache
 from django.utils.translation import ugettext as _
+from djblets.util.compat import six
+from djblets.util.compat.six.moves.urllib.parse import (urlsplit, urlunsplit,
+                                                        quote)
 
 from reviewboard.diffviewer.parser import DiffParser
 from reviewboard.scmtools.certs import Certificate
@@ -151,30 +153,32 @@ class SVNTool(SCMTool):
             # SVN expects to have URLs escaped. Take care to only
             # escape the path part of the URL.
             if self.client.is_url(normpath):
-                pathtuple = urlparse.urlsplit(normpath)
+                pathtuple = urlsplit(normpath)
                 path = pathtuple[2]
-                if isinstance(path, unicode):
+                if isinstance(path, six.text_type):
                     path = path.encode('utf-8', 'ignore')
-                normpath = urlparse.urlunsplit((pathtuple[0],
-                                                pathtuple[1],
-                                                urllib.quote(path),
-                                                '', ''))
+                normpath = urlunsplit((pathtuple[0],
+                                       pathtuple[1],
+                                       quote(path),
+                                       '', ''))
 
             normrev = self.__normalize_revision(revision)
             return cb(normpath, normrev)
 
-        except ClientError, e:
-            stre = str(e)
+        except ClientError as e:
+            stre = six.text_type(e)
             if 'File not found' in stre or 'path not found' in stre:
-                raise FileNotFoundError(path, revision, detail=str(e))
+                raise FileNotFoundError(path, revision,
+                                        detail=six.text_type(e))
             elif 'callback_ssl_server_trust_prompt required' in stre:
                 raise SCMError(
-                    'HTTPS certificate not accepted.  Please ensure that '
-                    'the proper certificate exists in %s '
-                    'for the user that reviewboard is running as.'
+                    _('HTTPS certificate not accepted.  Please ensure that '
+                      'the proper certificate exists in %s '
+                      'for the user that reviewboard is running as.')
                     % os.path.join(self.config_dir, 'auth'))
             elif 'callback_get_login required' in stre:
-                raise AuthenticationError(msg='Login to the SCM server failed.')
+                raise AuthenticationError(
+                    msg=_('Login to the SCM server failed.'))
             else:
                 raise SCMError(e)
 
@@ -211,7 +215,8 @@ class SVNTool(SCMTool):
         trunk, unused = self.client.list(self.__normalize_path('trunk'),
                                          dirent_fields=SVN_DIRENT_CREATED_REV,
                                          recurse=False)[0]
-        results.append(Branch('trunk', str(trunk['created_rev'].number), True))
+        results.append(
+            Branch('trunk', six.text_type(trunk['created_rev'].number), True))
 
         try:
             branches = self.client.list(
@@ -220,7 +225,7 @@ class SVNTool(SCMTool):
             for branch, unused in branches:
                 results.append(Branch(
                     branch['path'].split('/')[-1],
-                    str(branch['created_rev'].number)))
+                    six.text_type(branch['created_rev'].number)))
         except ClientError:
             # It's possible there aren't any branches. Ignore errors for this
             # part.
@@ -247,10 +252,10 @@ class SVNTool(SCMTool):
             date = datetime.datetime.utcfromtimestamp(commit['date'])
             results.append(Commit(
                 commit['author'],
-                str(commit['revision'].number),
+                six.text_type(commit['revision'].number),
                 date.isoformat(),
                 commit['message'],
-                str(parent['revision'].number)))
+                six.text_type(parent['revision'].number)))
 
         # If there were fewer than 31 commits fetched, also include the last one
         # in the list so we don't leave off the initial revision.
@@ -259,7 +264,7 @@ class SVNTool(SCMTool):
             date = datetime.datetime.utcfromtimestamp(commit['date'])
             results.append(Commit(
                 commit['author'],
-                str(commit['revision'].number),
+                six.text_type(commit['revision'].number),
                 date.isoformat(),
                 commit['message']))
 
@@ -309,8 +314,8 @@ class SVNTool(SCMTool):
 
         rmtree(tmpdir)
 
-        commit = Commit(author_name, str(head_revision.number), date,
-                        message, str(base_revision.number))
+        commit = Commit(author_name, six.text_type(head_revision.number), date,
+                        message, six.text_type(base_revision.number))
         commit.diff = diff
         return commit
 
@@ -414,7 +419,7 @@ class SVNTool(SCMTool):
     def get_repository_info(self):
         try:
             info = self.client.info2(self.repopath, recurse=False)
-        except ClientError, e:
+        except ClientError as e:
             raise SCMError(e)
 
         return {
@@ -429,7 +434,7 @@ class SVNTool(SCMTool):
         elif revision == PRE_CREATION:
             raise FileNotFoundError('', revision)
         else:
-            r = Revision(opt_revision_kind.number, str(revision))
+            r = Revision(opt_revision_kind.number, six.text_type(revision))
 
         return r
 
@@ -494,11 +499,11 @@ class SVNTool(SCMTool):
             info = client.info2(path, recurse=False)
             logging.debug('SVN: Got repository information for %s: %s' %
                           (path, info))
-        except ClientError, e:
+        except ClientError as e:
             logging.error('SVN: Failed to get repository information '
                           'for %s: %s' % (path, e))
 
-            if 'callback_get_login required' in str(e):
+            if 'callback_get_login required' in six.text_type(e):
                 raise AuthenticationError(msg="Authentication failed")
 
             if cert_data:
@@ -567,17 +572,17 @@ class SVNTool(SCMTool):
         client = pysvn.Client(config_dir)
 
         if username:
-            client.set_default_username(str(username))
+            client.set_default_username(six.text_type(username))
 
         if password:
-            client.set_default_password(str(password))
+            client.set_default_password(six.text_type(password))
 
         return config_dir, client
 
     @classmethod
     def _create_subversion_dir(cls, config_dir):
         try:
-            os.mkdir(config_dir, 0700)
+            os.mkdir(config_dir, 0o700)
         except OSError:
             raise IOError(
                 _("Unable to create directory %(dirname)s, which is needed "
@@ -597,10 +602,9 @@ class SVNTool(SCMTool):
         if not os.path.exists(config_dir):
             cls._create_subversion_dir(config_dir)
 
-            fp = open(os.path.join(config_dir, 'config'), 'w')
-            fp.write('[tunnels]\n')
-            fp.write('ssh = rbssh --rb-local-site=%s\n' % local_site_name)
-            fp.close()
+            with open(os.path.join(config_dir, 'config'), 'w') as fp:
+                fp.write('[tunnels]\n')
+                fp.write('ssh = rbssh --rb-local-site=%s\n' % local_site_name)
 
         return config_dir
 

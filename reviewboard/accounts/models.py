@@ -1,16 +1,20 @@
+from __future__ import unicode_literals
+
 from django.contrib.auth.models import User
 from django.db import models
 from django.utils import timezone
+from django.utils.encoding import python_2_unicode_compatible
 from django.utils.translation import ugettext_lazy as _
-from djblets.util.db import ConcurrencyManager
-from djblets.util.fields import CounterField, JSONField
-from djblets.util.forms import TIMEZONE_CHOICES
+from djblets.db.fields import CounterField, JSONField
+from djblets.db.managers import ConcurrencyManager
+from djblets.forms.fields import TIMEZONE_CHOICES
 
 from reviewboard.accounts.managers import ProfileManager
 from reviewboard.reviews.models import Group, ReviewRequest
 from reviewboard.site.models import LocalSite
 
 
+@python_2_unicode_compatible
 class ReviewRequestVisit(models.Model):
     """
     A recording of the last time a review request was visited by a user.
@@ -27,13 +31,14 @@ class ReviewRequestVisit(models.Model):
     # Set this up with a ConcurrencyManager to help prevent race conditions.
     objects = ConcurrencyManager()
 
-    def __unicode__(self):
-        return u"Review request visit"
+    def __str__(self):
+        return "Review request visit"
 
     class Meta:
         unique_together = ("user", "review_request")
 
 
+@python_2_unicode_compatible
 class Profile(models.Model):
     """User profile.  Contains some basic configurable settings"""
     user = models.ForeignKey(User, unique=True)
@@ -175,16 +180,21 @@ class Profile(models.Model):
         if self.starred_groups.filter(pk=review_group.pk).count() > 0:
             self.starred_groups.remove(review_group)
 
-    def __unicode__(self):
+    def __str__(self):
         return self.user.username
 
 
+@python_2_unicode_compatible
 class LocalSiteProfile(models.Model):
     """User profile information specific to a LocalSite."""
     user = models.ForeignKey(User, related_name='site_profiles')
     profile = models.ForeignKey(Profile, related_name='site_profiles')
     local_site = models.ForeignKey(LocalSite, null=True, blank=True,
                                    related_name='site_profiles')
+
+    # A dictionary of permission that the user has granted. Any permission
+    # missing is considered to be False.
+    permissions = JSONField(null=True)
 
     # Counts for quickly knowing how many review requests are incoming
     # (both directly and total), outgoing (pending and total ever made),
@@ -216,7 +226,7 @@ class LocalSiteProfile(models.Model):
         unique_together = (('user', 'local_site'),
                            ('profile', 'local_site'))
 
-    def __unicode__(self):
+    def __str__(self):
         return '%s (%s)' % (self.user.username, self.local_site)
 
 
@@ -259,6 +269,26 @@ def _get_profile(self):
 
     return self._profile
 
+
+def _get_site_profile(self, local_site):
+    """Returns the LocalSiteProfile for a given LocalSite for the User.
+
+    The profile will be cached, preventing queries for future lookups.
+    """
+    if not hasattr(self, '_site_profiles'):
+        self._site_profiles = {}
+
+    if local_site.pk not in self._site_profiles:
+        site_profile = \
+            LocalSiteProfile.objects.get(user=self, local_site=local_site)
+        site_profile.user = self
+        site_profile.local_site = local_site
+        self._site_profiles[local_site.pk] = site_profile
+
+    return self._site_profiles[local_site.pk]
+
+
 User.is_profile_visible = _is_user_profile_visible
 User.get_profile = _get_profile
+User.get_site_profile = _get_site_profile
 User._meta.ordering = ('username',)

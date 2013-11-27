@@ -11,9 +11,12 @@ RB.ReviewRequestEditor = Backbone.Model.extend({
         editCount: 0,
         hasDraft: false,
         fileAttachmentComments: {},
+        mutableByUser: false,
         pendingSaveCount: 0,
         publishing: false,
-        reviewRequest: null
+        reviewRequest: null,
+        statusEditable: false,
+        statusMutableByUser: false
     },
 
     _jsonFieldMap: {
@@ -47,6 +50,9 @@ RB.ReviewRequestEditor = Backbone.Model.extend({
         reviewRequest.draft.on('saved', function() {
             this.trigger('saved');
         }, this);
+
+        this.listenTo(reviewRequest, 'change:state', this._computeEditable);
+        this._computeEditable();
     },
 
     /*
@@ -95,17 +101,12 @@ RB.ReviewRequestEditor = Backbone.Model.extend({
             return;
         }
 
-        if (!reviewRequest.draft.get('richText') &&
-            (fieldName === 'changeDescription' ||
-             fieldName === 'description' ||
-             fieldName === 'testingDone')) {
+        if (fieldName === 'changeDescription' ||
+            fieldName === 'description' ||
+            fieldName === 'testingDone') {
             /*
-             * The review request was not previously rich text, but we want
-             * it to be.
-             *
-             * It is expected that the view will, at this point, have converted
-             * the initial text on the client side to valid Markdown (by
-             * escaping the text on load).
+             * The client is responsible for specifying that the fields being
+             * sent are rich-text.
              */
             data.rich_text = true;
         }
@@ -243,6 +244,25 @@ RB.ReviewRequestEditor = Backbone.Model.extend({
         if (_.has(attrs, 'editCount') && attrs.editCount < 0) {
             return strings.UNBALANCED_EDIT_COUNT;
         }
+    },
+
+    /*
+     * Computes the editable state of the review request and open/close states.
+     *
+     * The review request is editable if the user has edit permissions and it's
+     * not closed.
+     *
+     * The close state and accompanying description is editable if the user
+     * has the ability to close the review request and it's currently closed.
+     */
+    _computeEditable: function() {
+        var state = this.get('reviewRequest').get('state'),
+            pending = (state === RB.ReviewRequest.PENDING);
+
+        this.set({
+            editable: this.get('mutableByUser') && pending,
+            statusEditable: this.get('statusMutableByUser') && !pending
+        });
     },
 
     /*

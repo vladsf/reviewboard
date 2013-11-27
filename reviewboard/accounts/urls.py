@@ -1,3 +1,5 @@
+from __future__ import unicode_literals
+
 from django.conf import settings
 from django.conf.urls import patterns, url
 
@@ -11,16 +13,12 @@ urlpatterns = patterns(
 )
 
 urlpatterns += patterns(
-    "djblets.auth.views",
-
-    url(r'^login/$',
-        'login',
-        {'next_page': settings.SITE_ROOT + 'dashboard/'},
-        name="login"),
-)
-
-urlpatterns += patterns(
     "django.contrib.auth.views",
+
+    url(r'^login/$', 'login',
+        {'template_name': 'accounts/login.html'},
+        name='login'),
+    url(r'^logout/$', 'logout_then_login', name='logout'),
 
     url(r'^recover/$',
         'password_reset',

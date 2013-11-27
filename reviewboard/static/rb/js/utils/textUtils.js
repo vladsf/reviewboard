@@ -6,7 +6,7 @@
  *       reflected in reviewboard/reviews/markdown_utils.py.
  */
 var MARKDOWN_SPECIAL_CHARS_RE = /([\\`\*_\{\}\[\]\(\)\>\#\+\-\.\!])/g,
-    ESCAPE_CHARS_RE = /(^\s*(\d+\.)+|[\\`\*_\{\}\[\]\(\)\>\#\+\-\!])/gm;
+    ESCAPE_CHARS_RE = /(^\s*(\d+\.)+|^\s*(\#)+|^\s*[-\+]+|[\\`\*_\{\}\[\]\(\)\>\!])/gm;
 
 
 // If `marked` is defined, initialize it with our preferred options
@@ -21,7 +21,7 @@ if (marked !== undefined) {
         langPrefix : 'language-',
         highlight: function(code, lang) {
             // Use google code prettify to render syntax highlighting
-            return prettyPrintOne(code, lang, true /* line nos. */);
+            return prettyPrintOne(_.escape(code), lang, true /* line nos. */);
         }
     });
 }
@@ -65,17 +65,19 @@ RB.formatText = function($el, text, bugTrackerURL, options) {
             });
         }
 
-        // Now linkify and markdown-ize
-        markedUp = RB.LinkifyUtils.linkifyReviewRequests(markedUp, true);
-        markedUp = RB.LinkifyUtils.linkifyBugs(markedUp, bugTrackerURL, true);
-        markedUp = marked(markedUp);
+        if (markedUp.length > 0) {
+            // Now linkify and markdown-ize
+            markedUp = RB.LinkifyUtils.linkifyReviewRequests(markedUp, true);
+            markedUp = RB.LinkifyUtils.linkifyBugs(markedUp, bugTrackerURL, true);
+            markedUp = marked(markedUp);
 
-        /*
-         * markup() adds newlines to each directive, resulting in a trailing
-         * newline for the contents. Since this may be formatted inside a
-         * <pre>, we want to make sure we don't have that extra newline.
-         */
-        markedUp = markedUp.trim();
+            /*
+             * markup() adds newlines to each directive, resulting in a trailing
+             * newline for the contents. Since this may be formatted inside a
+             * <pre>, we want to make sure we don't have that extra newline.
+             */
+            markedUp = markedUp.trim();
+        }
 
         $el
             .empty()
@@ -98,7 +100,7 @@ RB.escapeMarkdown = function(text) {
     return text.replace(ESCAPE_CHARS_RE, function(text, m1) {
         return m1.replace(MARKDOWN_SPECIAL_CHARS_RE, '\\$1');
     });
-}
+};
 
 
 }());

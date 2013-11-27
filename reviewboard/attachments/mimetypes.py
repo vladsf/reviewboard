@@ -1,3 +1,5 @@
+from __future__ import unicode_literals
+
 import logging
 import os
 
@@ -5,7 +7,7 @@ from django.contrib.staticfiles.templatetags.staticfiles import static
 from django.utils.html import escape
 from django.utils.encoding import smart_str, force_unicode
 from django.utils.safestring import mark_safe
-from djblets.util.misc import cache_memoize
+from djblets.cache.backend import cache_memoize
 from djblets.util.templatetags.djblets_images import thumbnail
 from pipeline.storage import default_storage
 import docutils.core
@@ -150,7 +152,7 @@ class MimetypeHandler(object):
         if handler:
             try:
                 return handler(attachment, mimetype)
-            except Exception, e:
+            except Exception as e:
                 logging.error('Unable to load Mimetype Handler for %s: %s',
                               attachment, e, exc_info=1)
 
@@ -202,7 +204,7 @@ class ImageMimetype(MimetypeHandler):
                          'class="file-thumbnail" alt="%s" />'
                          % (thumbnail(self.attachment.file),
                             thumbnail(self.attachment.file, '800x200'),
-                            self.attachment.caption))
+                            escape(self.attachment.caption)))
 
 
 class TextMimetype(MimetypeHandler):
@@ -234,7 +236,7 @@ class TextMimetype(MimetypeHandler):
 
         try:
             data_string = f.read(self.FILE_CROP_CHAR_LIMIT)
-        except (ValueError, IOError), e:
+        except (ValueError, IOError) as e:
             logging.error('Failed to read from file attachment %s: %s'
                           % (self.attachment.pk, e))
             raise
@@ -400,6 +402,6 @@ MIMETYPE_ICON_ALIASES = {
 # such as 'text/x-rst' or 'text/x-markdown', so we just go by the
 # extension name.
 MIMETYPE_EXTENSIONS = {
-    '.rst': (u'text', u'x-rst', {}),
-    '.md': (u'text', u'x-markdown', {}),
+    '.rst': ('text', 'x-rst', {}),
+    '.md': ('text', 'x-markdown', {}),
 }

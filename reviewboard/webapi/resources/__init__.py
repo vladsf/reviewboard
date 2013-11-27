@@ -1,3 +1,5 @@
+from __future__ import unicode_literals
+
 import logging
 
 from django.contrib.auth.models import User
@@ -50,8 +52,9 @@ class Resources(object):
                 mod = __import__('reviewboard.webapi.resources.%s' % name,
                                  {}, {}, [instance_name])
                 self.__dict__[name] = getattr(mod, instance_name)
-            except (ImportError, AttributeError), e:
-                logging.error('Unable to load webapi resource: %s' % e)
+            except (ImportError, AttributeError) as e:
+                logging.error('Unable to load webapi resource %s: %s'
+                              % (name, e))
                 raise AttributeError('%s is not a valid resource name' % name)
 
         return self.__dict__[name]
@@ -86,6 +89,11 @@ class Resources(object):
                                     self.review_request_draft)
         register_resource_for_model(Screenshot, self.screenshot)
         register_resource_for_model(FileAttachment, self.file_attachment)
+        register_resource_for_model(
+            FileAttachment,
+            lambda obj: (obj.is_from_diff and
+                         self.diff_file_attachment or
+                         self.file_attachment))
         register_resource_for_model(
             ScreenshotComment,
             lambda obj: (obj.review.get().is_reply() and

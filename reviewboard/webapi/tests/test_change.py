@@ -1,8 +1,10 @@
+from __future__ import unicode_literals
+
 from datetime import timedelta
 
 from django.contrib.auth.models import User
 from django.core.files import File
-from django.utils import timezone
+from django.utils import six, timezone
 from djblets.testing.decorators import add_fixtures
 from djblets.webapi.errors import PERMISSION_DENIED
 
@@ -148,7 +150,7 @@ class ResourceItemTests(ReviewRequestChildItemMixin, BaseWebAPITestCase):
     def test_get(self):
         """Testing the GET review-requests/<id>/changes/<id>/ API"""
         def write_fields(obj, index):
-            for field, data in test_data.iteritems():
+            for field, data in six.iteritems(test_data):
                 value = data[index]
 
                 if isinstance(value, list) and field not in model_fields:
@@ -173,9 +175,8 @@ class ResourceItemTests(ReviewRequestChildItemMixin, BaseWebAPITestCase):
         screenshot3 = Screenshot.objects.create(caption=old_screenshot_caption)
 
         for screenshot in [screenshot1, screenshot2, screenshot3]:
-            f = open(self._getTrophyFilename(), 'r')
-            screenshot.image.save('foo.png', File(f), save=True)
-            f.close()
+            with open(self._getTrophyFilename(), 'r') as f:
+                screenshot.image.save('foo.png', File(f), save=True)
 
         test_data = {
             'summary': ('old summary', 'new summary', None, None),
@@ -218,7 +219,7 @@ class ResourceItemTests(ReviewRequestChildItemMixin, BaseWebAPITestCase):
         change = r.changedescs.get()
         self.assertEqual(change.text, changedesc_text)
 
-        for field, data in test_data.iteritems():
+        for field, data in six.iteritems(test_data):
             old, new, removed, added = data
             field_data = change.fields_changed[field]
 
@@ -252,7 +253,7 @@ class ResourceItemTests(ReviewRequestChildItemMixin, BaseWebAPITestCase):
 
         self.assertTrue('screenshot_captions' in change.fields_changed)
         field_data = change.fields_changed['screenshot_captions']
-        screenshot_id = str(screenshot3.pk)
+        screenshot_id = six.text_type(screenshot3.pk)
         self.assertTrue(screenshot_id in field_data)
         self.assertTrue('old' in field_data[screenshot_id])
         self.assertTrue('new' in field_data[screenshot_id])
@@ -275,7 +276,7 @@ class ResourceItemTests(ReviewRequestChildItemMixin, BaseWebAPITestCase):
 
         fields_changed = rsp['change']['fields_changed']
 
-        for field, data in test_data.iteritems():
+        for field, data in six.iteritems(test_data):
             old, new, removed, added = data
 
             self.assertTrue(field in fields_changed)

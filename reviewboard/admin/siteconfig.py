@@ -29,11 +29,13 @@
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
 
+from __future__ import unicode_literals
 
 import os.path
 
 from django.conf import settings, global_settings
 from django.core.exceptions import ImproperlyConfigured
+from django.utils import six
 from djblets.log import siteconfig as log_siteconfig
 from djblets.siteconfig.django_settings import (apply_django_settings,
                                                 get_django_defaults,
@@ -242,7 +244,7 @@ def load_site_config():
     if auth_backend_id == "custom":
         custom_backends = siteconfig.settings.get("auth_custom_backends")
 
-        if isinstance(custom_backends, basestring):
+        if isinstance(custom_backends, six.string_types):
             custom_backends = (custom_backends,)
         elif isinstance(custom_backends, list):
             custom_backends = tuple(custom_backends)
@@ -270,9 +272,9 @@ def load_site_config():
 
     # These blow up if they're not the perfectly right types
     settings.AWS_QUERYSTRING_AUTH = siteconfig.get('aws_querystring_auth')
-    settings.AWS_ACCESS_KEY_ID = str(siteconfig.get('aws_access_key_id'))
-    settings.AWS_SECRET_ACCESS_KEY = str(siteconfig.get('aws_secret_access_key'))
-    settings.AWS_STORAGE_BUCKET_NAME = str(siteconfig.get('aws_s3_bucket_name'))
+    settings.AWS_ACCESS_KEY_ID = six.text_type(siteconfig.get('aws_access_key_id'))
+    settings.AWS_SECRET_ACCESS_KEY = six.text_type(siteconfig.get('aws_secret_access_key'))
+    settings.AWS_STORAGE_BUCKET_NAME = six.text_type(siteconfig.get('aws_s3_bucket_name'))
     try:
         settings.AWS_CALLING_FORMAT = int(siteconfig.get('aws_calling_format'))
     except ValueError:

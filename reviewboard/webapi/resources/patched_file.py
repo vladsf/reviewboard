@@ -1,8 +1,10 @@
+from __future__ import unicode_literals
+
 import logging
-from urllib import quote as urllib_quote
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.http import HttpResponse
+from djblets.util.compat.six.moves.urllib.parse import quote as urllib_quote
 from djblets.util.http import set_last_modified
 from djblets.webapi.errors import DOES_NOT_EXIST
 
@@ -51,7 +53,7 @@ class PatchedFileResource(WebAPIResource):
 
         try:
             orig_file = get_original_file(filediff, request=request)
-        except Exception, e:
+        except Exception as e:
             logging.error("Error retrieving original file: %s", e, exc_info=1,
                           request=request)
             return FILE_RETRIEVAL_ERROR
@@ -59,7 +61,7 @@ class PatchedFileResource(WebAPIResource):
         try:
             patched_file = get_patched_file(orig_file, filediff,
                                             request=request)
-        except Exception, e:
+        except Exception as e:
             logging.error("Error retrieving patched file: %s", e, exc_info=1,
                           request=request)
             return FILE_RETRIEVAL_ERROR

@@ -1,17 +1,20 @@
+from __future__ import unicode_literals
+
 import os
 import re
 
 from django.contrib.auth.models import User
 from django.db import models
 from django.db.models import Q
-from django.utils import timezone
+from django.utils import six, timezone
+from django.utils.encoding import python_2_unicode_compatible
 from django.utils.html import escape
 from django.utils.safestring import mark_safe
 from django.utils.translation import ugettext_lazy as _
-from djblets.util.db import ConcurrencyManager
-from djblets.util.fields import (CounterField, JSONField,
-                                 ModificationTimestampField)
-from djblets.util.misc import get_object_or_none
+from djblets.db.fields import (CounterField, JSONField,
+                               ModificationTimestampField)
+from djblets.db.managers import ConcurrencyManager
+from djblets.db.query import get_object_or_none
 from djblets.util.templatetags.djblets_images import crop_image, thumbnail
 
 from reviewboard.changedescs.models import ChangeDescription
@@ -22,6 +25,7 @@ from reviewboard.reviews.managers import (DefaultReviewerManager,
                                           ReviewGroupManager,
                                           ReviewRequestManager,
                                           ReviewManager)
+from reviewboard.reviews.markdown_utils import markdown_escape
 from reviewboard.reviews.signals import (review_request_published,
                                          review_request_reopened,
                                          review_request_closed,
@@ -32,6 +36,7 @@ from reviewboard.site.models import LocalSite
 from reviewboard.site.urlresolvers import local_site_reverse
 
 
+@python_2_unicode_compatible
 class Group(models.Model):
     """
     A group of reviewers identified by a name. This is usually used to
@@ -81,10 +86,9 @@ class Group(models.Model):
         proper permissions, or the group is part of a LocalSite and the user is
         in the admin list.
         """
-        return (user.has_perm('reviews.change_group') or
-                (self.local_site and self.local_site.is_mutable_by(user)))
+        return user.has_perm('reviews.change_group', self.local_site)
 
-    def __unicode__(self):
+    def __str__(self):
         return self.name
 
     def get_absolute_url(self):
@@ -102,6 +106,7 @@ class Group(models.Model):
         ordering = ['name']
 
 
+@python_2_unicode_compatible
 class DefaultReviewer(models.Model):
     """
     A default reviewer entry automatically adds default reviewers to a
@@ -150,13 +155,14 @@ class DefaultReviewer(models.Model):
 
         LocalSite administrators can modify or delete them on their LocalSites.
         """
-        return (user.has_perm('reviews.change_default_reviewer') or
-                (self.local_site and self.local_site.is_mutable_by(user)))
+        return user.has_perm('reviews.change_default_reviewer',
+                             self.local_site)
 
-    def __unicode__(self):
+    def __str__(self):
         return self.name
 
 
+@python_2_unicode_compatible
 class Screenshot(models.Model):
     """
     A screenshot associated with a review request.
@@ -192,11 +198,11 @@ class Screenshot(models.Model):
         url = self.get_thumbnail_url()
         return mark_safe('<img src="%s" data-at2x="%s" alt="%s" />' %
                          (url, thumbnail(self.image, '800x200'),
-                          self.caption))
+                          escape(self.caption)))
     thumb.allow_tags = True
 
-    def __unicode__(self):
-        return u"%s (%s)" % (self.caption, self.image)
+    def __str__(self):
+        return "%s (%s)" % (self.caption, self.image)
 
     def get_review_request(self):
         if hasattr(self, '_review_request'):
@@ -430,11 +436,18 @@ class BaseReviewRequestDetails(models.Model):
         if hasattr(self, 'changenum'):
             self.update_commit_id(commit_id)
 
-        self.summary = changeset.summary
-        self.description = changeset.description
+        if self.rich_text:
+            description = markdown_escape(changeset.description)
+            testing_done = markdown_escape(changeset.testing_done)
+        else:
+            description = changeset.description
+            testing_done = changeset.testing_done
 
-        if changeset.testing_done:
-            self.testing_done = changeset.testing_done
+        self.summary = changeset.summary
+        self.description = description
+
+        if testing_done:
+            self.testing_done = testing_done
 
         if changeset.branch:
             self.branch = changeset.branch
@@ -455,12 +468,15 @@ class BaseReviewRequestDetails(models.Model):
             self.commit = commit_id
 
         self.summary = summary.strip()
-        self.description = message.strip()
+        if self.rich_text:
+            self.description = markdown_escape(message.strip())
+        else:
+            self.description = message.strip()
 
         DiffSet.objects.create_from_data(
             repository=self.repository,
             diff_file_name='diff',
-            diff_file_contents=commit.diff,
+            diff_file_contents=commit.diff.encode('utf-8'), ### XXX: check unicode
             parent_diff_file_name=None,
             parent_diff_file_contents=None,
             diffset_history=self.diffset_history,
@@ -483,11 +499,11 @@ class BaseReviewRequestDetails(models.Model):
 
         return string
 
-    def __unicode__(self):
+    def __str__(self):
         if self.summary:
             return self.summary
         else:
-            return unicode(_('(no summary)'))
+            return six.text_type(_('(no summary)'))
 
     class Meta:
         abstract = True
@@ -608,14 +624,14 @@ class ReviewRequest(BaseReviewRequestDetails):
         if self.commit_id is not None:
             return self.commit_id
         elif self.changenum is not None:
-            self.commit_id = str(self.changenum)
+            self.commit_id = six.text_type(self.changenum)
 
             # Update the state in the database, but don't save this
             # model, or we can end up with some state (if we haven't
             # properly loaded everything yet). This affects docs.db
             # generation, and may cause problems in the wild.
             ReviewRequest.objects.filter(pk=self.pk).update(
-                commit_id=str(self.changenum))
+                commit_id=six.text_type(self.changenum))
 
             return self.commit_id
 
@@ -734,9 +750,19 @@ class ReviewRequest(BaseReviewRequestDetails):
         return False
 
     def is_mutable_by(self, user):
-        "Returns true if the user can modify this review request"
+        """Returns whether the user can modify this review request."""
         return (self.submitter == user or
-                user.has_perm('reviews.can_edit_reviewrequest'))
+                user.has_perm('reviews.can_edit_reviewrequest',
+                              self.local_site))
+
+    def is_status_mutable_by(self, user):
+        """Returns whether the user can modify this review request's status."""
+        return (self.submitter == user or
+                user.has_perm('reviews.can_change_status', self.local_site))
+
+    def is_deletable_by(self, user):
+        """Returns whether the user can delete this review request."""
+        return user.has_perm('reviews.delete_reviewrequest')
 
     def get_draft(self, user=None):
         """
@@ -901,7 +927,7 @@ class ReviewRequest(BaseReviewRequestDetails):
         SUBMITTED or DISCARDED.
         """
         if (user and not self.is_mutable_by(user) and
-            not user.has_perm("reviews.can_change_status")):
+            not user.has_perm("reviews.can_change_status", self.local_site)):
             raise PermissionError
 
         if type not in [self.SUBMITTED, self.DISCARDED]:
@@ -947,7 +973,7 @@ class ReviewRequest(BaseReviewRequestDetails):
         Reopens the review request for review.
         """
         if (user and not self.is_mutable_by(user) and
-            not user.has_perm("reviews.can_change_status")):
+            not user.has_perm("reviews.can_change_status", self.local_site)):
             raise PermissionError
 
         if self.status != self.PENDING_REVIEW:
@@ -1226,8 +1252,12 @@ class ReviewRequestDraft(BaseReviewRequestDetails):
             draft.changedesc = changedesc
 
         if draft_is_new:
-            map(draft.target_groups.add, review_request.target_groups.all())
-            map(draft.target_people.add, review_request.target_people.all())
+            for group in review_request.target_groups.all():
+                draft.target_groups.add(group)
+
+            for person in review_request.target_people.all():
+                draft.target_people.add(person)
+
             for screenshot in review_request.screenshots.all():
                 screenshot.draft_caption = screenshot.caption
                 screenshot.save()
@@ -1326,7 +1356,8 @@ class ReviewRequestDraft(BaseReviewRequestDetails):
                                                         name_field)
 
                 a.clear()
-                map(a.add, b.all())
+                for item in b.all():
+                    a.add(item)
 
         update_field(review_request, self, 'summary')
         update_field(review_request, self, 'description')
@@ -1385,8 +1416,8 @@ class ReviewRequestDraft(BaseReviewRequestDetails):
 
         # There's no change notification required for this field.
         review_request.inactive_screenshots.clear()
-        map(review_request.inactive_screenshots.add,
-            self.inactive_screenshots.all())
+        for screenshot in self.inactive_screenshots.all():
+            review_request.inactive_screenshots.add(screenshot)
 
         # Files are treated like screenshots. The list of files can
         # change, but so can captions within each file.
@@ -1421,8 +1452,8 @@ class ReviewRequestDraft(BaseReviewRequestDetails):
 
         # There's no change notification required for this field.
         review_request.inactive_file_attachments.clear()
-        map(review_request.inactive_file_attachments.add,
-            self.inactive_file_attachments.all())
+        for attachment in self.inactive_file_attachments.all():
+            review_request.inactive_file_attachments.add(attachment)
 
         if self.diffset:
             if self.changedesc:
@@ -1473,6 +1504,7 @@ class ReviewRequestDraft(BaseReviewRequestDetails):
         ordering = ['-last_updated']
 
 
+@python_2_unicode_compatible
 class BaseComment(models.Model):
     OPEN           = "O"
     RESOLVED       = "R"
@@ -1602,7 +1634,7 @@ class BaseComment(models.Model):
         except Review.DoesNotExist:
             pass
 
-    def __unicode__(self):
+    def __str__(self):
         return self.text
 
     class Meta:
@@ -1636,7 +1668,7 @@ class Comment(BaseComment):
     last_line = property(lambda self: self.first_line + self.num_lines - 1)
 
     def get_absolute_url(self):
-        revision_path = str(self.filediff.diffset.revision)
+        revision_path = six.text_type(self.filediff.diffset.revision)
         if self.interfilediff:
             revision_path += "-%s" % self.interfilediff.diffset.revision
 
@@ -1726,6 +1758,7 @@ class FileAttachmentComment(BaseComment):
                                              escape(self.text))
 
 
+@python_2_unicode_compatible
 class Review(models.Model):
     """
     A review of a review request.
@@ -1832,8 +1865,8 @@ class Review(models.Model):
                  (self.user == user or user.is_superuser)) and
                 self.review_request.is_accessible_by(user))
 
-    def __unicode__(self):
-        return u"Review of '%s'" % self.review_request
+    def __str__(self):
+        return "Review of '%s'" % self.review_request
 
     def is_reply(self):
         """
@@ -1918,7 +1951,8 @@ class Review(models.Model):
         # Update the last_updated timestamp and the last review activity
         # timestamp on the review request.
         self.review_request.last_review_activity_timestamp = self.timestamp
-        self.review_request.save()
+        self.review_request.save(
+            update_fields=['last_review_activity_timestamp'])
 
         # Atomicly update the shipit_count
         if self.ship_it:

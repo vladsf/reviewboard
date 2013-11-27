@@ -1,11 +1,10 @@
+from __future__ import unicode_literals
+
 import logging
 import re
 
-try:
-    from urllib2 import quote as urllib_quote
-except ImportError:
-    from urllib import quote as urllib_quote
-
+from djblets.util.compat import six
+from djblets.util.compat.six.moves.urllib.parse import quote as urllib_quote
 from pkg_resources import parse_version
 
 from reviewboard.diffviewer.parser import DiffParser, DiffParserError
@@ -34,7 +33,7 @@ class HgTool(SCMTool):
         self.uses_atomic_revisions = True
 
     def get_file(self, path, revision=HEAD):
-        return self.client.cat_file(path, str(revision))
+        return self.client.cat_file(path, six.text_type(revision))
 
     def parse_diff_revision(self, file_str, revision_str, *args, **kwargs):
         revision = revision_str
@@ -271,7 +270,7 @@ class HgClient(object):
 
         try:
             self.repo = hg.repository(hg_ui, path=repoPath)
-        except error.RepoError, e:
+        except error.RepoError as e:
             logging.error('Error connecting to Mercurial repository %s: %s'
                           % (repoPath, e))
             raise RepositoryNotFoundError
@@ -284,7 +283,7 @@ class HgClient(object):
 
         try:
             return self.repo.changectx(rev).filectx(path).data()
-        except Exception, e:
+        except Exception as e:
             # LookupError moves from repo to revlog in hg v0.9.4, so we
             # catch the more general Exception to avoid the dependency.
-            raise FileNotFoundError(path, rev, detail=str(e))
+            raise FileNotFoundError(path, rev, detail=six.text_type(e))

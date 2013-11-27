@@ -1,9 +1,14 @@
+from __future__ import unicode_literals
+
 import markdown
 from django import template
+from django.utils import six
 from django.utils.safestring import mark_safe
 from markdown.extensions import Extension
 from markdown.treeprocessors import Treeprocessor
 from markdown.util import etree
+
+from reviewboard.reviews.markdown_utils import markdown_unescape
 
 
 register = template.Library()
@@ -56,7 +61,7 @@ class InlineStyleProcessor(Treeprocessor):
         # Create a valid CSS string and set it as the style attribute
         el.set('style', ''.join([
             '%s: %s;' % (k, v)
-            for k, v in style.iteritems()
+            for k, v in six.iteritems(style)
         ]))
 
         # Recurse into children
@@ -91,3 +96,11 @@ def markdown_email_html(text, is_rich_text):
         output_format='xhtml1',
         safe_mode='escape')
     return mark_safe(marked)
+
+
+@register.filter
+def markdown_email_text(text, is_rich_text):
+    if not is_rich_text:
+        return text
+
+    return markdown_unescape(text)

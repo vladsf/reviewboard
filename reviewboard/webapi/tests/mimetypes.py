@@ -1,3 +1,6 @@
+from __future__ import unicode_literals
+
+
 def _build_mimetype(resource_name, fmt='json'):
     return 'application/vnd.reviewboard.org.%s+%s' % (resource_name, fmt)
 
@@ -12,6 +15,10 @@ default_reviewer_item_mimetype = _build_mimetype('default-reviewer')
 
 diff_list_mimetype = _build_mimetype('diffs')
 diff_item_mimetype = _build_mimetype('diff')
+
+
+diff_file_attachment_list_mimetype = _build_mimetype('diff-file-attachments')
+diff_file_attachment_item_mimetype = _build_mimetype('diff-file-attachment')
 
 
 draft_file_attachment_list_mimetype = _build_mimetype('draft-file-attachments')

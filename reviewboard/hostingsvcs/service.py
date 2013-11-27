@@ -1,11 +1,17 @@
+from __future__ import unicode_literals
+
 import base64
 import json
 import logging
 import mimetools
-import urllib2
-from urlparse import urlparse
 
 from django.utils.translation import ugettext_lazy as _
+from djblets.util.compat import six
+from djblets.util.compat.six.moves.urllib.parse import urlparse
+from djblets.util.compat.six.moves.urllib.request import (
+    Request as URLRequest,
+    HTTPBasicAuthHandler,
+    urlopen)
 from pkg_resources import iter_entry_points
 
 
@@ -30,6 +36,7 @@ class HostingService(object):
     supports_post_commit = False
     supports_repositories = False
     supports_ssh_key_association = False
+    supports_two_factor_auth = False
     self_hosted = False
 
     # These values are defaults that can be overridden in repository_plans
@@ -158,13 +165,14 @@ class HostingService(object):
 
         results = {}
 
-        for field, value in fields[tool_name].iteritems():
+        for field, value in six.iteritems(fields[tool_name]):
             try:
                 results[field] = value % new_vars
-            except KeyError, e:
+            except KeyError as e:
                 logging.error('Failed to generate %s field for hosting '
                               'service %s using %s and %r: Missing key %s'
-                              % (field, unicode(cls.name), value, new_vars, e),
+                              % (field, six.text_type(cls.name), value,
+                                 new_vars, e),
                               exc_info=1)
                 raise KeyError(
                     _('Internal error when generating %(field)s field '
@@ -195,10 +203,10 @@ class HostingService(object):
 
         try:
             return bug_tracker_field % field_vars
-        except KeyError, e:
+        except KeyError as e:
             logging.error('Failed to generate %s field for hosting '
                           'service %s using %r: Missing key %s'
-                          % (bug_tracker_field, unicode(cls.name),
+                          % (bug_tracker_field, six.text_type(cls.name),
                              field_vars, e),
                           exc_info=1)
             raise KeyError(
@@ -247,24 +255,25 @@ class HostingService(object):
         if content_type:
             headers['Content-Type'] = content_type
 
-        headers['Content-Length'] = str(len(body))
+        headers['Content-Length'] = '%d' % len(body)
 
         return self._http_request(url, body, headers, **kwargs)
 
     def _build_request(self, url, body=None, headers={}, username=None,
                        password=None):
-        r = urllib2.Request(url, body, headers)
+        r = URLRequest(url, body, headers)
 
         if username is not None and password is not None:
-            r.add_header(urllib2.HTTPBasicAuthHandler.auth_header,
-                         'Basic %s' % base64.b64encode(username + ':' +
-                                                       password))
+            auth_key = username + ':' + password
+            r.add_header(HTTPBasicAuthHandler.auth_header,
+                         'Basic %s' %
+                         base64.b64encode(auth_key.encode('utf-8')))
 
         return r
 
     def _http_request(self, url, body=None, headers={}, **kwargs):
         r = self._build_request(url, body, headers, **kwargs)
-        u = urllib2.urlopen(r)
+        u = urlopen(r)
 
         return u.read(), u.headers
 
@@ -277,7 +286,7 @@ class HostingService(object):
             content += "--" + BOUNDARY + "\r\n"
             content += "Content-Disposition: form-data; name=\"%s\"\r\n" % key
             content += "\r\n"
-            content += str(fields[key]) + "\r\n"
+            content += six.text_type(fields[key]) + "\r\n"
 
         for key in files:
             filename = files[key]['filename']
@@ -309,7 +318,7 @@ def _populate_hosting_services():
         for entry in iter_entry_points('reviewboard.hosting_services'):
             try:
                 _hosting_services[entry.name] = entry.load()
-            except Exception, e:
+            except Exception as e:
                 logging.error(
                     'Unable to load repository hosting service %s: %s'
                     % (entry, e))
@@ -322,7 +331,7 @@ def get_hosting_services():
     """
     _populate_hosting_services()
 
-    for name, cls in _hosting_services.iteritems():
+    for name, cls in six.iteritems(_hosting_services):
         yield name, cls
 
 

@@ -1,4 +1,5 @@
-from __future__ import with_statement
+from __future__ import unicode_literals
+
 import copy
 import os
 import re
@@ -63,6 +64,36 @@ class TestCase(DjbletsTestCase):
             doc = self.ws_re.sub(' ', doc).strip()
 
         return doc
+
+    def create_diff_file_attachment(self, filediff, from_modified=True,
+                                    review_request=None,
+                                    orig_filename='filename.png',
+                                    caption='My Caption',
+                                    mimetype='image/png',
+                                    **kwargs):
+        """Creates a diff-based FileAttachment for testing.
+
+        The FileAttachment is tied to the given FileDiff. It's populated
+        with default data that can be overridden by the caller.
+        """
+        file_attachment = FileAttachment.objects.create_from_filediff(
+            filediff=filediff,
+            from_modified=from_modified,
+            caption=caption,
+            orig_filename=orig_filename,
+            mimetype=mimetype,
+            **kwargs)
+
+        filename = os.path.join(settings.STATIC_ROOT, 'rb', 'images',
+                                'trophy.png')
+
+        with open(filename, 'r') as f:
+            file_attachment.file.save(filename, File(f), save=True)
+
+        if review_request:
+            review_request.file_attachments.add(file_attachment)
+
+        return file_attachment
 
     def create_diffset(self, review_request=None, revision=1, repository=None,
                        draft=False, name='diffset'):
@@ -488,7 +519,7 @@ class TestCase(DjbletsTestCase):
                     for obj in serializers.deserialize('json', fp, using=db)
                     if router.allow_syncdb(db, obj.object.__class__)
                 ]
-        except IOError, e:
+        except IOError as e:
             sys.stderr.write('Unable to load fixture %s: %s\n' % (fixture, e))
 
     def _get_fixture_dirs(self):
@@ -542,7 +573,7 @@ class TestCase(DjbletsTestCase):
                     try:
                         obj = copy.copy(obj)
                         obj.save(using=db)
-                    except (DatabaseError, IntegrityError), e:
+                    except (DatabaseError, IntegrityError) as e:
                         sys.stderr.write('Could not load %s.%s(pk=%s): %s\n'
                                          % (obj.object._meta.app_label,
                                             obj.object._meta.object_name,

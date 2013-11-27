@@ -24,11 +24,11 @@
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
 
+from __future__ import unicode_literals
 
 import logging
 import os
 import re
-import urlparse
 
 from django import forms
 from django.contrib.sites.models import Site
@@ -36,10 +36,12 @@ from django.conf import settings
 from django.core.cache import DEFAULT_CACHE_ALIAS
 from django.core.exceptions import ValidationError
 from django.utils.translation import ugettext as _
+from djblets.cache.backend_compat import normalize_cache_backend
+from djblets.forms.fields import TimeZoneField
 from djblets.log import restart_logging
 from djblets.siteconfig.forms import SiteSettingsForm
-from djblets.util.cache import normalize_cache_backend
-from djblets.util.forms import TimeZoneField
+from djblets.util.compat import six
+from djblets.util.compat.six.moves.urllib.parse import urlparse
 
 from reviewboard.accounts.forms import LegacyAuthModuleSettingsForm
 from reviewboard.admin.checks import (get_can_enable_search,
@@ -187,7 +189,7 @@ class GeneralSettingsForm(SiteSettingsForm):
             # believes the domain is actually the path. So we apply a prefix.
             server = "http://" + server
 
-        url_parts = urlparse.urlparse(server)
+        url_parts = urlparse(server)
         domain_method = url_parts[0]
         domain_name = url_parts[1]
 
@@ -231,7 +233,7 @@ class GeneralSettingsForm(SiteSettingsForm):
     def full_clean(self):
         cache_type = self['cache_type'].data or self['cache_type'].initial
 
-        for iter_cache_type, field in self.CACHE_LOCATION_FIELD_MAP.iteritems():
+        for iter_cache_type, field in six.iteritems(self.CACHE_LOCATION_FIELD_MAP):
             self.fields[field].required = (cache_type == iter_cache_type)
 
         return super(GeneralSettingsForm, self).full_clean()
@@ -355,7 +357,7 @@ class AuthenticationSettingsForm(SiteSettingsForm):
                     builtin_auth_choice = choice
                 else:
                     backend_choices.append(choice)
-            except Exception, e:
+            except Exception as e:
                 logging.error('Error loading authentication backend %s: %s'
                               % (backend_id, e),
                               exc_info=1)
@@ -408,7 +410,7 @@ class AuthenticationSettingsForm(SiteSettingsForm):
             if auth_backend in self.auth_backend_forms:
                 self.auth_backend_forms[auth_backend].full_clean()
         else:
-            for form in self.auth_backend_forms.values():
+            for form in six.itervalues(self.auth_backend_forms):
                 form.full_clean()
 
     class Meta:
@@ -676,12 +678,12 @@ class SSHSettingsForm(forms.Form):
         if self.cleaned_data['generate_key']:
             try:
                 SSHClient().generate_user_key()
-            except IOError, e:
+            except IOError as e:
                 self.errors['generate_key'] = forms.util.ErrorList([
                     _('Unable to write SSH key file: %s') % e
                 ])
                 raise
-            except Exception, e:
+            except Exception as e:
                 self.errors['generate_key'] = forms.util.ErrorList([
                     _('Error generating SSH key: %s') % e
                 ])
@@ -689,12 +691,12 @@ class SSHSettingsForm(forms.Form):
         elif self.cleaned_data['keyfile']:
             try:
                 SSHClient().import_user_key(files['keyfile'])
-            except IOError, e:
+            except IOError as e:
                 self.errors['keyfile'] = forms.util.ErrorList([
                     _('Unable to write SSH key file: %s') % e
                 ])
                 raise
-            except Exception, e:
+            except Exception as e:
                 self.errors['keyfile'] = forms.util.ErrorList([
                     _('Error uploading SSH key: %s') % e
                 ])
@@ -709,7 +711,7 @@ class SSHSettingsForm(forms.Form):
         if self.cleaned_data['delete_key']:
             try:
                 SSHClient().delete_user_key()
-            except Exception, e:
+            except Exception as e:
                 self.errors['delete_key'] = forms.util.ErrorList([
                     _('Unable to delete SSH key file: %s') % e
                 ])

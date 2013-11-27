@@ -1,4 +1,7 @@
+from __future__ import unicode_literals
+
 from django.db.models import Q
+from django.utils import six
 from djblets.gravatars import get_gravatar_url
 from djblets.util.decorators import augment_method_from
 from djblets.webapi.decorators import webapi_request_fields
@@ -23,7 +26,7 @@ class UserResource(WebAPIResource, DjbletsUserResource):
 
     fields = dict({
         'avatar_url': {
-            'type': str,
+            'type': six.text_type,
             'description': 'The URL for an avatar representing the user.',
         },
     }, **DjbletsUserResource.fields)
@@ -32,11 +35,11 @@ class UserResource(WebAPIResource, DjbletsUserResource):
 
     def get_etag(self, request, obj, *args, **kwargs):
         if obj.is_profile_visible(request.user):
-            return self.generate_etag(obj, self.fields.iterkeys(), request)
+            return self.generate_etag(obj, six.iterkeys(self.fields), request)
         else:
             return self.generate_etag(obj, [
                 field
-                for field in self.fields.iterkeys()
+                for field in six.iterkeys(self.fields)
                 if field not in self.hidden_fields
             ], request)
 
@@ -90,7 +93,7 @@ class UserResource(WebAPIResource, DjbletsUserResource):
     @webapi_request_fields(
         optional={
             'q': {
-                'type': str,
+                'type': six.text_type,
                 'description': 'The string that the username (or the first '
                                'name or last name when using ``fullname``) '
                                'must start with in order to be included in '

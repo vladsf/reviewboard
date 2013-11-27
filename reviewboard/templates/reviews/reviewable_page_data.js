@@ -11,8 +11,10 @@
 {% endif %}
             description: "{{review_request_details.description|escapejs}}",
             hasDraft: {% if draft %}true{% else %}false{% endif %},
+            lastUpdatedTimestamp: {{review_request.last_updated|json_dumps}},
             public: {% if review_request.public %}true{% else %}false{% endif %},
             reviewURL: "{{review_request.get_absolute_url|escapejs}}",
+            state: RB.ReviewRequest.{% if review_request.status == 'P' %}PENDING{% elif review_request.status == 'D' %}CLOSE_DISCARDED{% elif review_request.status == 'S' %}CLOSE_SUBMITTED{% endif %},
             summary: "{{review_request_details.summary|escapejs}}",
             targetGroups: [{% spaceless %}
 {% for group in review_request_details.target_groups.all %}
@@ -31,7 +33,8 @@
             testingDone: "{{review_request_details.testing_done|escapejs}}"
         },
         editorData: {
-            editable: {% if review_request.status == 'P' %}true{% else %}false{% endif %},
+            mutableByUser: {{mutable_by_user|yesno:'true,false'}},
+            statusMutableByUser: {{status_mutable_by_user|yesno:'true,false'}},
             fileAttachmentComments: {
 {% if all_file_attachments %}
 {%  for file_attachment in all_file_attachments %}

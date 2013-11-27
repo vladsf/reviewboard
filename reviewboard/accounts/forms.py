@@ -1,3 +1,5 @@
+from __future__ import unicode_literals
+
 import re
 import sre_constants
 
@@ -7,9 +9,9 @@ from django.forms import widgets
 from django.utils.safestring import mark_safe
 from django.utils.translation import ugettext as _
 from djblets.auth.forms import RegistrationForm as DjbletsRegistrationForm
+from djblets.forms.fields import TimeZoneField
 from djblets.siteconfig.forms import SiteSettingsForm
 from djblets.siteconfig.models import SiteConfiguration
-from djblets.util.forms import TimeZoneField
 from recaptcha.client import captcha
 
 from reviewboard.accounts.models import Profile
@@ -471,7 +473,7 @@ class X509SettingsForm(SiteSettingsForm):
 
         try:
             re.compile(regex)
-        except sre_constants.error, e:
+        except sre_constants.error as e:
             raise ValidationError(e)
 
         return regex

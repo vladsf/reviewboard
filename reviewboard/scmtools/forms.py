@@ -1,3 +1,5 @@
+from __future__ import unicode_literals
+
 import imp
 import logging
 import sys
@@ -5,12 +7,14 @@ import sys
 from django import forms
 from django.contrib.admin.widgets import FilteredSelectMultiple
 from django.core.exceptions import ValidationError
+from django.utils import six
 from django.utils.translation import ugettext_lazy as _
 from djblets.util.filesystem import is_exe_in_path
 
 from reviewboard.admin.validation import validate_bug_tracker
 from reviewboard.hostingsvcs.errors import (AuthorizationError,
-                                            SSHKeyAssociationError)
+                                            SSHKeyAssociationError,
+                                            TwoFactorAuthCodeRequiredError)
 from reviewboard.hostingsvcs.models import HostingServiceAccount
 from reviewboard.hostingsvcs.service import (get_hosting_services,
                                              get_hosting_service)
@@ -89,6 +93,11 @@ class RepositoryForm(forms.ModelForm):
         label=_('Account password'),
         required=True,
         widget=forms.PasswordInput(attrs={'size': 30, 'autocomplete': 'off'}))
+
+    hosting_account_two_factor_auth_code = forms.CharField(
+        label=_('Two-factor auth code'),
+        required=True,
+        widget=forms.TextInput(attrs={'size': 30, 'autocomplete': 'off'}))
 
     # Repository Information fields
     tool = forms.ModelChoiceField(
@@ -228,6 +237,9 @@ class RepositoryForm(forms.ModelForm):
                 'supports_bug_trackers': hosting_service.supports_bug_trackers,
                 'supports_ssh_key_association':
                     hosting_service.supports_ssh_key_association,
+                'supports_two_factor_auth':
+                    hosting_service.supports_two_factor_auth,
+                'needs_two_factor_auth_code': False,
                 'accounts': [
                     {
                         'pk': account.pk,
@@ -259,7 +271,7 @@ class RepositoryForm(forms.ModelForm):
                                                self.DEFAULT_PLAN_NAME,
                                                hosting_service.form,
                                                *args, **kwargs)
-            except Exception, e:
+            except Exception as e:
                 logging.error('Error loading hosting service %s: %s'
                               % (hosting_service_id, e),
                               exc_info=1)
@@ -289,7 +301,7 @@ class RepositoryForm(forms.ModelForm):
             self.public_key = self.ssh_client.get_public_key(ssh_key)
             self.public_key_str = '%s %s' % (
                 ssh_key.get_name(),
-                ''.join(str(self.public_key).splitlines())
+                ''.join(six.text_type(self.public_key).splitlines())
             )
         else:
             self.public_key = None
@@ -340,7 +352,7 @@ class RepositoryForm(forms.ModelForm):
         hosting_info['planInfo'][repo_type_id] = plan_info
         hosting_info['plans'].append({
             'type': repo_type_id,
-            'label': unicode(repo_type_label),
+            'label': six.text_type(repo_type_label),
         })
 
     def _populate_repository_info_fields(self):
@@ -464,6 +476,12 @@ class RepositoryForm(forms.ModelForm):
         else:
             hosting_url = None
 
+        if hosting_service_cls.supports_two_factor_auth:
+            two_factor_auth_code = \
+                self.cleaned_data['hosting_account_two_factor_auth_code']
+        else:
+            two_factor_auth_code = None
+
         if hosting_account and hosting_account.hosting_url != hosting_url:
             self.errors['hosting_account'] = self.error_class([
                 _('This account is not compatible with this hosting service '
@@ -524,13 +542,20 @@ class RepositoryForm(forms.ModelForm):
                 hosting_account.service.authorize(
                     username, password,
                     hosting_url,
+                    two_factor_auth_code=two_factor_auth_code,
                     local_site_name=self.local_site_name)
-            except AuthorizationError, e:
+            except TwoFactorAuthCodeRequiredError as e:
+                self.errors['hosting_account'] = \
+                    self.error_class([unicode(e)])
+                hosting_info = self.hosting_service_info[hosting_type]
+                hosting_info['needs_two_factor_auth_code'] = True
+                return
+            except AuthorizationError as e:
                 self.errors['hosting_account'] = self.error_class([
                     _('Unable to link the account: %s') % e,
                 ])
                 return
-            except Exception, e:
+            except Exception as e:
                 self.errors['hosting_account'] = self.error_class([
                     _('Unknown error when linking the account: %s') % e,
                 ])
@@ -550,8 +575,8 @@ class RepositoryForm(forms.ModelForm):
             self.cleaned_data.update(hosting_service_cls.get_repository_fields(
                 hosting_account.username, hosting_account.hosting_url, plan,
                 tool_name, field_vars))
-        except KeyError, e:
-            raise ValidationError([unicode(e)])
+        except KeyError as e:
+            raise ValidationError([six.text_type(e)])
 
     def _clean_bug_tracker_info(self):
         """Clean the bug tracker information.
@@ -582,7 +607,10 @@ class RepositoryForm(forms.ModelForm):
             # exists.
             assert hosting_service_cls
 
-            if hosting_service_cls.supports_bug_trackers:
+            if (hosting_service_cls.supports_bug_trackers and
+                self.cleaned_data.get('hosting_account')):
+                # We have a valid hosting account linked up, so we can
+                # process this and copy over the account information.
                 form = self.repository_forms[hosting_type][plan]
                 new_data = self.cleaned_data.copy()
                 new_data.update(form.cleaned_data)
@@ -619,7 +647,7 @@ class RepositoryForm(forms.ModelForm):
 
             if form.is_valid():
                 # Strip the prefix from each bit of cleaned data in the form.
-                for key, value in form.cleaned_data.iteritems():
+                for key, value in six.iteritems(form.cleaned_data):
                     key = key.replace(form.prefix, '')
                     new_data[key] = value
 
@@ -634,7 +662,7 @@ class RepositoryForm(forms.ModelForm):
         extra_errors = {}
         required_values = {}
 
-        for field in self.fields.itervalues():
+        for field in six.itervalues(self.fields):
             required_values[field] = field.required
 
         if self.data:
@@ -707,6 +735,11 @@ class RepositoryForm(forms.ModelForm):
                 hosting_service.needs_authorization and
                 (new_hosting_account or
                  (account and not account.is_authorized)))
+            self.fields['hosting_account_two_factor_auth_code'].required = (
+                hosting_service and
+                hosting_service.supports_two_factor_auth and
+                self.hosting_service_info[hosting_type]
+                    ['needs_two_factor_auth_code'])
 
             # Only require a URL if the hosting service is self-hosted.
             self.fields['hosting_url'].required = (
@@ -750,8 +783,8 @@ class RepositoryForm(forms.ModelForm):
             # Validate every hosting service form and bug tracker form and
             # store any data or errors for later.
             for form_list in (self.repository_forms, self.bug_tracker_forms):
-                for plans in form_list.values():
-                    for form in plans.values():
+                for plans in six.itervalues(form_list):
+                    for form in six.itervalues(plans):
                         if form.is_valid():
                             extra_cleaned_data.update(form.cleaned_data)
                         else:
@@ -769,7 +802,7 @@ class RepositoryForm(forms.ModelForm):
         # Undo the required settings above. Now that we're done with them
         # for validation, we want to fix the display so that users don't
         # see the required states change.
-        for field, required in required_values.iteritems():
+        for field, required in six.iteritems(required_values):
             field.required = required
 
     def clean(self):
@@ -791,7 +824,7 @@ class RepositoryForm(forms.ModelForm):
 
                 if self.local_site:
                     self.local_site_name = self.local_site.name
-            except LocalSite.DoesNotExist, e:
+            except LocalSite.DoesNotExist as e:
                 raise ValidationError([e])
 
             self._clean_hosting_info()
@@ -846,7 +879,7 @@ class RepositoryForm(forms.ModelForm):
             # Try to upload the key if it hasn't already been associated.
             if not hosting_service.is_ssh_key_associated(repository, key):
                 hosting_service.associate_ssh_key(repository, key)
-        except SSHKeyAssociationError, e:
+        except SSHKeyAssociationError as e:
             logging.warning('SSHKeyAssociationError for repository "%s" (%s)'
                             % (repository, e.message))
             raise ValidationError([
@@ -1082,47 +1115,47 @@ class RepositoryForm(forms.ModelForm):
 
                 # Success.
                 break
-            except BadHostKeyError, e:
+            except BadHostKeyError as e:
                 if self.cleaned_data['trust_host']:
                     try:
                         self.ssh_client.replace_host_key(e.hostname,
                                                          e.raw_expected_key,
                                                          e.raw_key)
-                    except IOError, e:
+                    except IOError as e:
                         raise ValidationError(e)
                 else:
                     self.hostkeyerror = e
                     break
-            except UnknownHostKeyError, e:
+            except UnknownHostKeyError as e:
                 if self.cleaned_data['trust_host']:
                     try:
                         self.ssh_client.add_host_key(e.hostname, e.raw_key)
-                    except IOError, e:
+                    except IOError as e:
                         raise ValidationError(e)
                 else:
                     self.hostkeyerror = e
                     break
-            except UnverifiedCertificateError, e:
+            except UnverifiedCertificateError as e:
                 if self.cleaned_data['trust_host']:
                     try:
                         self.cert = scmtool_class.accept_certificate(
                             path, self.local_site_name, e.certificate)
-                    except IOError, e:
+                    except IOError as e:
                         raise ValidationError(e)
                 else:
                     self.certerror = e
                     break
-            except AuthenticationError, e:
+            except AuthenticationError as e:
                 if 'publickey' in e.allowed_types and e.user_key is None:
                     self.userkeyerror = e
                     break
 
                 raise ValidationError(e)
-            except Exception, e:
+            except Exception as e:
                 try:
-                    text = unicode(e)
+                    text = six.text_type(e)
                 except UnicodeDecodeError:
-                    text = str(e).decode('ascii', 'replace')
+                    text = six.text_type(e, 'ascii', 'replace')
                 raise ValidationError(text)
 
     def _get_field_data(self, field):

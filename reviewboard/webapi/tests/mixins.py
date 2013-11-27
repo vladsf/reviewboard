@@ -1,5 +1,9 @@
+from __future__ import unicode_literals
+
 from django.contrib.auth.models import User
 from djblets.testing.decorators import add_fixtures
+from djblets.util.compat import six
+from djblets.util.compat.six.moves import range
 from djblets.util.decorators import simple_decorator
 from djblets.webapi.errors import PERMISSION_DENIED
 
@@ -85,7 +89,7 @@ class BasicTestsMixin(object):
                                   % self.__class__.__name__)
 
     def _close_file_handles(self, post_data):
-        for value in post_data.itervalues():
+        for value in six.itervalues(post_data):
             if isinstance(value, file):
                 value.close()
 
@@ -285,7 +289,7 @@ class BasicGetListTestsMixin(BasicTestsMixin):
         items_rsp = rsp[self.resource.list_result_key]
         self.assertEqual(len(items), len(items_rsp))
 
-        for i in xrange(len(items)):
+        for i in range(len(items)):
             self.compare_item(items_rsp[i], items[i])
 
     @add_fixtures(['test_site'])
@@ -307,7 +311,7 @@ class BasicGetListTestsMixin(BasicTestsMixin):
         items_rsp = rsp[self.resource.list_result_key]
         self.assertEqual(len(items), len(items_rsp))
 
-        for i in xrange(len(items)):
+        for i in range(len(items)):
             self.compare_item(items_rsp[i], items[i])
 
     @add_fixtures(['test_site'])

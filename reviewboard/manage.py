@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from __future__ import unicode_literals
+
 import imp
 import os
 import subprocess
@@ -173,8 +175,8 @@ if __name__ == "__main__":
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'reviewboard.settings')
 
     try:
-        import settings  # Assumed to be in the same directory.
-    except ImportError, e:
+        from reviewboard import settings
+    except ImportError as e:
         sys.stderr.write("Error: Can't find the file 'settings.py' in the "
                          "directory containing %r. It appears you've "
                          "customized things.\n"

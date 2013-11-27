@@ -1,14 +1,18 @@
+from __future__ import unicode_literals
+
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied
+from django.utils import six
 from django.utils.formats import localize
 from djblets.webapi.errors import DOES_NOT_EXIST
 
 from reviewboard.reviews.markdown_utils import markdown_set_field_escaped
 from reviewboard.reviews.models import BaseComment
 from reviewboard.webapi.base import WebAPIResource
+from reviewboard.webapi.mixins import MarkdownFieldsMixin
 from reviewboard.webapi.resources import resources
 
 
-class BaseCommentResource(WebAPIResource):
+class BaseCommentResource(MarkdownFieldsMixin, WebAPIResource):
     """Base class for comment resources.
 
     Provides common fields and functionality for all comment resources.
@@ -43,11 +47,11 @@ class BaseCommentResource(WebAPIResource):
                            '(Markdown) format.',
         },
         'text': {
-            'type': str,
+            'type': six.text_type,
             'description': 'The comment text.',
         },
         'timestamp': {
-            'type': str,
+            'type': six.text_type,
             'description': 'The date and time that the comment was made '
                            '(in YYYY-MM-DD HH:MM:SS format).',
         },
@@ -111,18 +115,13 @@ class BaseCommentResource(WebAPIResource):
             value = kwargs.get(field, None)
 
             if value is not None:
-                if isinstance(value, basestring):
+                if isinstance(value, six.string_types):
                     value = value.strip()
 
                 setattr(comment, field, value)
 
-        if 'rich_text' in kwargs:
-            rich_text = kwargs['rich_text']
-
-            if rich_text != old_rich_text and 'text' not in kwargs:
-                # rich_text has been changed, but new comment text has not.
-                # Escape or unescape the comment text as necessary.
-                markdown_set_field_escaped(comment, 'text', rich_text)
+        self.normalize_markdown_fields(comment, ['text'], old_rich_text,
+                                       **kwargs)
 
         if not is_reply:
             self._import_extra_data(comment.extra_data, extra_fields)

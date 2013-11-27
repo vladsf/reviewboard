@@ -1,10 +1,19 @@
+from __future__ import unicode_literals
+
 import base64
 import logging
 import os
 import subprocess
 import sys
-import urllib2
-import urlparse
+
+from django.utils.encoding import python_2_unicode_compatible
+from django.utils.translation import ugettext_lazy as _
+from djblets.util.compat import six
+from djblets.util.compat.six.moves.urllib.error import HTTPError
+from djblets.util.compat.six.moves.urllib.parse import urlparse
+from djblets.util.compat.six.moves.urllib.request import (
+    Request as URLRequest,
+    urlopen)
 
 import reviewboard.diffviewer.parser as diffparser
 from reviewboard.scmtools.errors import (AuthenticationError,
@@ -27,6 +36,7 @@ class ChangeSet:
         self.pending = False
 
 
+@python_2_unicode_compatible
 class Revision(object):
     def __init__(self, name):
         self.name = name
@@ -35,10 +45,10 @@ class Revision(object):
         return self.name
 
     def __eq__(self, other):
-        return self.name == str(other)
+        return self.name == six.text_type(other)
 
     def __ne__(self, other):
-        return self.name != str(other)
+        return self.name != six.text_type(other)
 
     def __repr__(self):
         return '<Revision: %s>' % self.name
@@ -110,8 +120,8 @@ class SCMTool(object):
     supports_raw_file_urls = False
     supports_ticket_auth = False
     field_help_text = {
-        'path': 'The path to the repository. This will generally be the URL '
-                'you would use to check out the repository.',
+        'path': _('The path to the repository. This will generally be the URL '
+                  'you would use to check out the repository.'),
     }
 
     # A list of dependencies for this SCMTool. This should be overridden
@@ -247,10 +257,10 @@ class SCMTool(object):
             try:
                 sshutils.check_host(hostname, username, password,
                                     local_site_name)
-            except SSHAuthenticationError, e:
+            except SSHAuthenticationError as e:
                 # Represent an SSHAuthenticationError as a standard
                 # AuthenticationError.
-                raise AuthenticationError(e.allowed_types, unicode(e),
+                raise AuthenticationError(e.allowed_types, six.text_type(e),
                                           e.user_key)
             except:
                 # Re-raise anything else
@@ -264,7 +274,7 @@ class SCMTool(object):
         If a username is implicitly passed via the path (user@host), it
         takes precedence over a passed username.
         """
-        url = urlparse.urlparse(path)
+        url = urlparse(path)
 
         if '@' in url[1]:
             netloc_username, hostname = url[1].split('@', 1)
@@ -303,15 +313,15 @@ class SCMClient(object):
         logging.info('Fetching file from %s' % url)
 
         try:
-            request = urllib2.Request(url)
+            request = URLRequest(url)
 
             if self.username:
                 auth_string = base64.b64encode('%s:%s' % (self.username,
                                                           self.password))
                 request.add_header('Authorization', 'Basic %s' % auth_string)
 
-            return urllib2.urlopen(request).read()
-        except urllib2.HTTPError, e:
+            return urlopen(request).read()
+        except HTTPError as e:
             if e.code == 404:
                 logging.error('404')
                 raise FileNotFoundError(path, revision)
@@ -320,7 +330,7 @@ class SCMClient(object):
                       (e.code, url, e)
                 logging.error(msg)
                 raise SCMError(msg)
-        except Exception, e:
+        except Exception as e:
             msg = "Unexpected error fetching file from %s: %s" % (url, e)
             logging.error(msg)
             raise SCMError(msg)

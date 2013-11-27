@@ -1,3 +1,5 @@
+from __future__ import unicode_literals
+
 import logging
 import pkg_resources
 import re
@@ -10,8 +12,9 @@ from django.contrib.auth.backends import ModelBackend
 from django.contrib.auth.models import User
 from django.contrib.auth import get_backends
 from django.contrib.auth import hashers
+from django.utils import six
 from django.utils.translation import ugettext as _
-from djblets.util.misc import get_object_or_none
+from djblets.db.query import get_object_or_none
 try:
     from ldap.filter import filter_format
 except ImportError:
@@ -22,6 +25,8 @@ from reviewboard.accounts.forms import (ActiveDirectorySettingsForm,
                                         NISSettingsForm,
                                         StandardAuthSettingsForm,
                                         X509SettingsForm)
+from reviewboard.accounts.models import LocalSiteProfile
+from reviewboard.site.models import LocalSite
 
 
 _auth_backends = []
@@ -38,6 +43,7 @@ class AuthBackend(object):
     supports_change_name = False
     supports_change_email = False
     supports_change_password = False
+    login_instructions = None
 
     def authenticate(self, username, password):
         raise NotImplementedError
@@ -89,6 +95,22 @@ class AuthBackend(object):
 
 
 class StandardAuthBackend(AuthBackend, ModelBackend):
+    """Authenticates users against the local database.
+
+    This will authenticate a user against their entry in the database, if
+    the user has a local password stored. This is the default form of
+    authentication in Review Board.
+
+    This backend also handles permission checking for users on LocalSites.
+    In Django, this is the responsibility of at least one auth backend in
+    the list of configured backends.
+
+    Regardless of the specific type of authentication chosen for the
+    installation, StandardAuthBackend will always be provided in the list
+    of configured backends. Because of this, it will always be able to
+    handle authentication against locally added users and handle
+    LocalSite-based permissions for all configurations.
+    """
     name = _('Standard Registration')
     settings_form = StandardAuthSettingsForm
     supports_registration = True
@@ -105,11 +127,104 @@ class StandardAuthBackend(AuthBackend, ModelBackend):
     def update_password(self, user, password):
         user.password = hashers.make_password(password)
 
+    def get_all_permissions(self, user, obj=None):
+        """Returns a list of all permissions for a user.
+
+        If a LocalSite instance is passed as ``obj``, then the permissions
+        returned will be those that the user has on that LocalSite. Otherwise,
+        they will be their global permissions.
+
+        It is not legal to pass any other object.
+        """
+        if obj is not None and not isinstance(obj, LocalSite):
+            logging.error('Unexpected object %r passed to '
+                          'StandardAuthBackend.get_all_permissions. '
+                          'Returning an empty list.' % obj)
+
+            if settings.DEBUG:
+                raise ValueError('Unexpected object %r' % obj)
+
+            return set()
+
+        if user.is_anonymous():
+            return set()
+
+        # First, get the list of all global permissions.
+        #
+        # Django's ModelBackend doesn't support passing an object, and will
+        # return an empty set, so don't pass an object for this attempt.
+        permissions = \
+            super(StandardAuthBackend, self).get_all_permissions(user)
+
+        if obj is not None:
+            # We know now that this is a LocalSite, due to the assertion
+            # above.
+            if not hasattr(user, '_local_site_perm_cache'):
+                user._local_site_perm_cache = {}
+
+            if obj.pk not in user._local_site_perm_cache:
+                perm_cache = set()
+
+                try:
+                    site_profile = user.get_site_profile(obj)
+                    site_perms = site_profile.permissions or {}
+
+                    if site_perms:
+                        perm_cache = set([
+                            key
+                            for key, value in six.iteritems(site_perms)
+                            if value
+                        ])
+                except LocalSiteProfile.DoesNotExist:
+                    pass
+
+                user._local_site_perm_cache[obj.pk] = perm_cache
+
+            permissions = permissions.copy()
+            permissions.update(user._local_site_perm_cache[obj.pk])
+
+        return permissions
+
+    def has_perm(self, user, perm, obj=None):
+        """Returns whether a user has the given permission.
+
+        If a LocalSite instance is passed as ``obj``, then the permissions
+        checked will be those that the user has on that LocalSite. Otherwise,
+        they will be their global permissions.
+
+        It is not legal to pass any other object.
+        """
+        if obj is not None and not isinstance(obj, LocalSite):
+            logging.error('Unexpected object %r passed to has_perm. '
+                          'Returning False.' % obj)
+
+            if settings.DEBUG:
+                raise ValueError('Unexpected object %r' % obj)
+
+            return False
+
+        if not user.is_active:
+            return False
+
+        if obj is not None:
+            if not hasattr(user, '_local_site_admin_for'):
+                user._local_site_admin_for = {}
+
+            if obj.pk not in user._local_site_admin_for:
+                user._local_site_admin_for[obj.pk] = obj.is_mutable_by(user)
+
+            if user._local_site_admin_for[obj.pk]:
+                return True
+
+        return super(StandardAuthBackend, self).has_perm(user, perm, obj)
+
 
 class NISBackend(AuthBackend):
     """Authenticate against a user on an NIS server."""
     name = _('NIS')
     settings_form = NISSettingsForm
+    login_instructions = \
+        _('Use your standard NIS username and password.')
 
     def authenticate(self, username, password):
         import crypt
@@ -150,7 +265,7 @@ class NISBackend(AuthBackend):
                 if len(names) > 1:
                     last_name = names[1]
 
-                email = u'%s@%s' % (username, settings.NIS_EMAIL_DOMAIN)
+                email = '%s@%s' % (username, settings.NIS_EMAIL_DOMAIN)
 
                 user = User(username=username,
                             password='',
@@ -170,6 +285,8 @@ class LDAPBackend(AuthBackend):
     """Authenticate against a user on an LDAP server."""
     name = _('LDAP')
     settings_form = LDAPSettingsForm
+    login_instructions = \
+        _('Use your standard LDAP username and password.')
 
     def authenticate(self, username, password):
         username = username.strip()
@@ -217,7 +334,10 @@ class LDAPBackend(AuthBackend):
                 search = ldapo.search_s(settings.LDAP_BASE_DN,
                                         ldap.SCOPE_SUBTREE,
                                         uid)
-                userbinding = search[0][0]
+                if (len(search) > 0):
+                    userbinding = search[0][0]
+                else:
+                    userbinding = ','.join([uid,settings.LDAP_BASE_DN])
                 ldapo.bind_s(userbinding, password)
 
             return self.get_or_create_user(username, None, ldapo)
@@ -228,7 +348,7 @@ class LDAPBackend(AuthBackend):
             logging.warning("LDAP error: The specified object does not exist "
                             "in the Directory or provided invalid "
                             "credentials: %s" % uid)
-        except ldap.LDAPError, e:
+        except ldap.LDAPError as e:
             logging.warning("LDAP error: %s" % e)
         except:
             # Fallback exception catch because
@@ -275,7 +395,7 @@ class LDAPBackend(AuthBackend):
                     pass
 
                 if settings.LDAP_EMAIL_DOMAIN:
-                    email = u'%s@%s' % (username, settings.LDAP_EMAIL_DOMAIN)
+                    email = '%s@%s' % (username, settings.LDAP_EMAIL_DOMAIN)
                 elif settings.LDAP_EMAIL_ATTRIBUTE:
                     email = user_info[settings.LDAP_EMAIL_ATTRIBUTE][0]
                 else:
@@ -300,12 +420,12 @@ class LDAPBackend(AuthBackend):
                 # ANON_BIND_UID and ANON_BIND_PASSWD are wrong, but I don't
                 # know how
                 pass
-            except ldap.NO_SUCH_OBJECT, e:
+            except ldap.NO_SUCH_OBJECT as e:
                 logging.warning("LDAP error: %s settings.LDAP_BASE_DN: %s "
                                 "settings.LDAP_UID_MASK: %s" %
                                 (e, settings.LDAP_BASE_DN,
                                  settings.LDAP_UID_MASK % username))
-            except ldap.LDAPError, e:
+            except ldap.LDAPError as e:
                 logging.warning("LDAP error: %s" % e)
 
         return None
@@ -315,9 +435,11 @@ class ActiveDirectoryBackend(AuthBackend):
     """Authenticate a user against an Active Directory server."""
     name = _('Active Directory')
     settings_form = ActiveDirectorySettingsForm
+    login_instructions = \
+        _('Use your standard Active Directory username and password.')
 
     def get_domain_name(self):
-        return str(settings.AD_DOMAIN_NAME)
+        return six.text_type(settings.AD_DOMAIN_NAME)
 
     def get_ldap_search_root(self, userdomain=None):
         if getattr(settings, "AD_SEARCH_ROOT", None):
@@ -448,7 +570,7 @@ class ActiveDirectoryBackend(AuthBackend):
                 if required_group:
                     try:
                         group_names = self.get_member_of(con, user_data)
-                    except Exception, e:
+                    except Exception as e:
                         logging.error("Active Directory error: failed getting"
                                       "groups for user '%s': %s" %
                                       (username, e))
@@ -487,7 +609,7 @@ class ActiveDirectoryBackend(AuthBackend):
                 last_name = user_info.get('sn', [""])[0]
                 email = user_info.get(
                     'mail',
-                    [u'%s@%s' % (username, settings.AD_DOMAIN_NAME)])[0]
+                    ['%s@%s' % (username, settings.AD_DOMAIN_NAME)])[0]
 
                 user = User(username=username,
                             password='',
@@ -528,7 +650,7 @@ class X509Backend(AuthBackend):
                 else:
                     logging.warning("X509Backend: username '%s' didn't match "
                                     "regex." % username)
-            except sre_constants.error, e:
+            except sre_constants.error as e:
                 logging.error("X509Backend: Invalid regex specified: %s" % e)
 
         return username
@@ -566,7 +688,7 @@ def get_registered_auth_backends():
     for entry in pkg_resources.iter_entry_points('reviewboard.auth_backends'):
         try:
             yield entry.name, entry.load()
-        except Exception, e:
+        except Exception as e:
             logging.error('Error loading authentication backend %s: %s'
                           % (entry.name, e),
                           exc_info=1)

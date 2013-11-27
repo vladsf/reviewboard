@@ -1,5 +1,8 @@
+from __future__ import unicode_literals
+
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Q
+from django.utils import six
 from djblets.util.decorators import augment_method_from
 from djblets.webapi.decorators import (webapi_login_required,
                                        webapi_response_errors,
@@ -11,11 +14,12 @@ from reviewboard.reviews.markdown_utils import markdown_set_field_escaped
 from reviewboard.reviews.models import Review
 from reviewboard.webapi.base import WebAPIResource
 from reviewboard.webapi.decorators import webapi_check_local_site
+from reviewboard.webapi.mixins import MarkdownFieldsMixin
 from reviewboard.webapi.resources import resources
 from reviewboard.webapi.resources.user import UserResource
 
 
-class BaseReviewResource(WebAPIResource):
+class BaseReviewResource(MarkdownFieldsMixin, WebAPIResource):
     """Base class for review resources.
 
     Provides common fields and functionality for all review resources.
@@ -23,11 +27,11 @@ class BaseReviewResource(WebAPIResource):
     model = Review
     fields = {
         'body_bottom': {
-            'type': str,
+            'type': six.text_type,
             'description': 'The review content below the comments.',
         },
         'body_top': {
-            'type': str,
+            'type': six.text_type,
             'description': 'The review content above the comments.',
         },
         'id': {
@@ -51,7 +55,7 @@ class BaseReviewResource(WebAPIResource):
                            '"Ship It!"',
         },
         'timestamp': {
-            'type': str,
+            'type': six.text_type,
             'description': 'The date and time that the review was posted '
                            '(in YYYY-MM-DD HH:MM:SS format).',
         },
@@ -98,11 +102,11 @@ class BaseReviewResource(WebAPIResource):
                 'description': 'Whether or not to mark the review "Ship It!"',
             },
             'body_top': {
-                'type': str,
+                'type': six.text_type,
                 'description': 'The review content above the comments.',
             },
             'body_bottom': {
-                'type': str,
+                'type': six.text_type,
                 'description': 'The review content below the comments.',
             },
             'public': {
@@ -178,11 +182,11 @@ class BaseReviewResource(WebAPIResource):
                 'description': 'Whether or not to mark the review "Ship It!"',
             },
             'body_top': {
-                'type': str,
+                'type': six.text_type,
                 'description': 'The review content above the comments.',
             },
             'body_bottom': {
-                'type': str,
+                'type': six.text_type,
                 'description': 'The review content below the comments.',
             },
             'public': {
@@ -264,21 +268,13 @@ class BaseReviewResource(WebAPIResource):
             value = kwargs.get(field, None)
 
             if value is not None:
-                if isinstance(value, basestring):
+                if isinstance(value, six.string_types):
                     value = value.strip()
 
                 setattr(review, field, value)
 
-        if 'rich_text' in kwargs:
-            rich_text = kwargs['rich_text']
-
-            if rich_text != old_rich_text:
-                # rich_text has been changed, but new comment text has not.
-                # Escape or unescape the comment text as necessary.
-                for text_field in ('body_top', 'body_bottom'):
-                    if text_field not in kwargs:
-                        markdown_set_field_escaped(review, text_field,
-                                                   rich_text)
+        self.normalize_markdown_fields(review, ['body_top', 'body_bottom'],
+                                       old_rich_text, **kwargs)
 
         review.save()
 

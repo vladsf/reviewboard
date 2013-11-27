@@ -29,6 +29,9 @@
 # TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
+
+from __future__ import unicode_literals
+
 import getpass
 import logging
 import os
@@ -301,7 +304,7 @@ def main():
                            password=password, pkey=key,
                            allow_agent=options.allow_agent)
             break
-        except paramiko.AuthenticationException, e:
+        except paramiko.AuthenticationException as e:
             if attempts == 3 or not sys.stdin.isatty():
                 logging.error('Too many authentication failures for %s' %
                               username)
@@ -310,10 +313,10 @@ def main():
             attempts += 1
             password = getpass.getpass("%s@%s's password: " %
                                        (username, hostname))
-        except paramiko.SSHException, e:
+        except paramiko.SSHException as e:
             logging.error('Error connecting to server: %s' % e)
             sys.exit(1)
-        except Exception, e:
+        except Exception as e:
             logging.error('Unknown exception during connect: %s (%s)' %
                           (e, type(e)))
             sys.exit(1)

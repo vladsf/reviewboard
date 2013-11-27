@@ -1,5 +1,8 @@
+from __future__ import unicode_literals
+
 import os
 
+from djblets.util.compat import six
 from djblets.webapi.errors import INVALID_FORM_DATA, PERMISSION_DENIED
 
 from reviewboard import scmtools
@@ -16,10 +19,9 @@ from reviewboard.webapi.tests.urls import (get_diff_item_url,
                                            get_diff_list_url)
 
 
+@six.add_metaclass(BasicTestsMetaclass)
 class ResourceListTests(ReviewRequestChildListMixin, BaseWebAPITestCase):
     """Testing the DiffResource list APIs."""
-    __metaclass__ = BasicTestsMetaclass
-
     fixtures = ['test_users', 'test_scmtools']
     sample_api_url = 'review-requests/<id>/diffs/'
     resource = resources.diff
@@ -119,12 +121,11 @@ class ResourceListTests(ReviewRequestChildListMixin, BaseWebAPITestCase):
 
         diff_filename = os.path.join(os.path.dirname(scmtools.__file__),
                                      'testdata', 'git_readme.diff')
-        f = open(diff_filename, "r")
-        rsp = self.apiPost(
-            get_diff_list_url(review_request),
-            {'path': f},
-            expected_status=400)
-        f.close()
+        with open(diff_filename, "r") as f:
+            rsp = self.apiPost(
+                get_diff_list_url(review_request),
+                {'path': f},
+                expected_status=400)
 
         self.assertEqual(rsp['stat'], 'fail')
         self.assertEqual(rsp['err']['code'], INVALID_FORM_DATA.code)
@@ -145,15 +146,14 @@ class ResourceListTests(ReviewRequestChildListMixin, BaseWebAPITestCase):
 
         diff_filename = os.path.join(os.path.dirname(scmtools.__file__),
                                      'testdata', 'git_readme.diff')
-        f = open(diff_filename, "r")
-
-        rsp = self.apiPost(
-            get_diff_list_url(review_request),
-            {
-                'path': f,
-                'basedir': "/trunk",
-            },
-            expected_status=400)
+        with open(diff_filename, "r") as f:
+            rsp = self.apiPost(
+                get_diff_list_url(review_request),
+                {
+                    'path': f,
+                    'basedir': "/trunk",
+                },
+                expected_status=400)
 
         self.assertEqual(rsp['stat'], 'fail')
         self.assertEqual(rsp['err']['code'], DIFF_TOO_BIG.code)
@@ -184,10 +184,9 @@ class ResourceListTests(ReviewRequestChildListMixin, BaseWebAPITestCase):
         self.assertEqual(rsp['err']['code'], PERMISSION_DENIED.code)
 
 
+@six.add_metaclass(BasicTestsMetaclass)
 class ResourceItemTests(ReviewRequestChildItemMixin, BaseWebAPITestCase):
     """Testing the DiffResource item APIs."""
-    __metaclass__ = BasicTestsMetaclass
-
     fixtures = ['test_users', 'test_scmtools']
     sample_api_url = 'review-requests/<id>/diffs/<revision>/'
     resource = resources.diff

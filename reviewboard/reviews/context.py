@@ -1,9 +1,12 @@
+from __future__ import unicode_literals
+
+from django.utils import six
 from django.utils.html import escape
 
 from reviewboard.attachments.forms import CommentFileForm, UploadFileForm
 from reviewboard.diffviewer.models import DiffSet
 from reviewboard.reviews.forms import UploadDiffForm, UploadScreenshotForm
-from reviewboard.reviews.models import BaseComment
+from reviewboard.reviews.models import BaseComment, ReviewRequest
 
 
 def comment_counts(user, all_comments, filediff, interfilediff=None):
@@ -62,7 +65,7 @@ def comment_counts(user, all_comments, filediff, interfilediff=None):
 
     comments_array = []
 
-    for key, value in comment_dict.iteritems():
+    for key, value in six.iteritems(comment_dict):
         comments_array.append({
             'linenum': key[0],
             'num_lines': key[1],
@@ -92,7 +95,13 @@ def make_review_request_context(request, review_request, extra_context={}):
         upload_diff_form = None
         scmtool = None
 
+    if 'blocks' not in extra_context:
+        extra_context['blocks'] = list(review_request.blocks.all())
+
     return dict({
+        'mutable_by_user': review_request.is_mutable_by(request.user),
+        'status_mutable_by_user':
+            review_request.is_status_mutable_by(request.user),
         'review_request': review_request,
         'upload_diff_form': upload_diff_form,
         'upload_screenshot_form': UploadScreenshotForm(),

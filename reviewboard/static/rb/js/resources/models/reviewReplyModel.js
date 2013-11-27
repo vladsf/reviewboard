@@ -9,7 +9,8 @@ RB.ReviewReply = RB.BaseResource.extend({
         public: false,
         richText: false,
         bodyTop: null,
-        bodyBottom: null
+        bodyBottom: null,
+        timestamp: null
     }, RB.BaseResource.prototype.defaults),
 
     rspNamespace: 'reply',
@@ -25,7 +26,8 @@ RB.ReviewReply = RB.BaseResource.extend({
         return {
             'public': this.get('public'),
             'body_top': this.get('bodyTop'),
-            'body_bottom': this.get('bodyBottom')
+            'body_bottom': this.get('bodyBottom'),
+            'rich_text': this.get('richText')
         };
     },
 
@@ -34,7 +36,8 @@ RB.ReviewReply = RB.BaseResource.extend({
             bodyTop: rsp.body_top,
             bodyBottom: rsp.body_bottom,
             public: rsp.public,
-            richText: rsp.rich_text
+            richText: rsp.rich_text,
+            timestamp: rsp.timestamp
         };
     },
 

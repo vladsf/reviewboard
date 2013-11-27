@@ -1,8 +1,11 @@
+from __future__ import unicode_literals
+
 import copy
 import logging
 import time
 
 from django.conf import settings
+from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.contrib.sites.models import Site
 from django.core.exceptions import MultipleObjectsReturned, ObjectDoesNotExist
@@ -14,21 +17,19 @@ from django.shortcuts import (get_object_or_404, get_list_or_404,
                               render_to_response)
 from django.template.context import RequestContext
 from django.template.loader import render_to_string
-from django.utils import timezone
+from django.utils import six, timezone
 from django.utils.decorators import method_decorator
 from django.utils.http import http_date
 from django.utils.safestring import mark_safe
 from django.utils.timezone import utc
 from django.utils.translation import ugettext as _
 from django.views.generic.list import ListView
-
-from djblets.auth.util import login_required
+from djblets.db.query import get_object_or_none
 from djblets.siteconfig.models import SiteConfiguration
 from djblets.util.dates import get_latest_timestamp
 from djblets.util.decorators import augment_method_from
 from djblets.util.http import (set_last_modified, get_modified_since,
                                set_etag, etag_if_none_match)
-from djblets.util.misc import get_object_or_none
 
 from reviewboard.accounts.decorators import (check_login_required,
                                              valid_prefs_required)
@@ -177,7 +178,7 @@ def build_diff_comment_fragments(
                 'domain': Site.objects.get_current().domain,
                 'domain_method': siteconfig.get("site_domain_method"),
             })
-        except Exception, e:
+        except Exception as e:
             content = exception_traceback_string(None, e,
                                                  error_template_name, {
                 'comment': comment,
@@ -256,7 +257,7 @@ def new_review_request(request,
                 'requires_change_number': scmtool.supports_pending_changesets,
                 'requires_basedir': not scmtool.get_diffs_use_absolute_paths(),
             })
-        except Exception, e:
+        except Exception as e:
             logging.error('Error loading SCMTool for repository '
                           '%s (ID %d): %s' % (repo.name, repo.id, e),
                           exc_info=1)
@@ -369,7 +370,7 @@ def review_detail(request,
                         reply_list[reply_id].append(review)
 
     pending_review = review_request.get_pending_review(request.user)
-    review_ids = reviews_id_map.keys()
+    review_ids = list(reviews_id_map.keys())
     last_visited = 0
     starred = False
 
@@ -409,9 +410,12 @@ def review_detail(request,
     else:
         draft_timestamp = ""
 
-    etag = "%s:%s:%s:%s:%s:%s:%s" % (
+    blocks = list(review_request.blocks.all())
+
+    etag = "%s:%s:%s:%s:%s:%s:%s:%s" % (
         request.user, last_activity_time, draft_timestamp,
         review_timestamp, review_request.last_review_activity_timestamp,
+        ','.join([six.text_type(r.pk) for r in blocks]),
         int(starred), settings.AJAX_SERIAL
     )
 
@@ -461,6 +465,7 @@ def review_detail(request,
                 },
                 'timestamp': review.timestamp,
                 'class': state,
+                'collapsed': state == 'collapsed',
             }
             reviews_entry_map[review.pk] = entry
             entries.append(entry)
@@ -468,7 +473,7 @@ def review_detail(request,
     # Link up all the review body replies.
     for key, reply_list in (('_body_top_replies', body_top_replies),
                             ('_body_bottom_replies', body_bottom_replies)):
-        for reply_id, replies in reply_list.iteritems():
+        for reply_id, replies in six.iteritems(reply_list):
             setattr(reviews_id_map[reply_id], key, replies)
 
     # Get all the file attachments and screenshots and build a couple maps,
@@ -610,7 +615,7 @@ def review_detail(request,
     for changedesc in changedescs:
         fields_changed = []
 
-        for name, info in changedesc.fields_changed.iteritems():
+        for name, info in six.iteritems(changedesc.fields_changed):
             info = copy.deepcopy(info)
             multiline = False
             diff_revision = False
@@ -684,6 +689,7 @@ def review_detail(request,
             'changedesc': changedesc,
             'timestamp': changedesc.timestamp,
             'class': state,
+            'collapsed': state == 'collapsed',
         })
 
     entries.sort(key=lambda item: item['timestamp'])
@@ -699,6 +705,7 @@ def review_detail(request,
             close_description_rich_text = latest_changedesc.rich_text
 
     context_data = make_review_request_context(request, review_request, {
+        'blocks': blocks,
         'draft': draft,
         'detail_hooks': ReviewRequestDetailHook.hooks,
         'review_request_details': review_request_details,
@@ -847,9 +854,13 @@ def group(request,
 
     datagrid = ReviewRequestDataGrid(
         request,
-        ReviewRequest.objects.to_group(name, local_site, status=None,
+        ReviewRequest.objects.to_group(name,
+                                       local_site,
+                                       user=request.user,
+                                       status=None,
                                        with_counts=True),
-        _("Review requests for %s") % name)
+        _("Review requests for %s") % name,
+        local_site=local_site)
 
     return datagrid.render_to_response(template_name)
 
@@ -911,7 +922,9 @@ def submitter(request,
 
     datagrid = ReviewRequestDataGrid(
         request,
-        ReviewRequest.objects.from_user(username, status=None,
+        ReviewRequest.objects.from_user(username,
+                                        user=request.user,
+                                        status=None,
                                         with_counts=True,
                                         local_site=local_site,
                                         filter_private=True),
@@ -1165,7 +1178,7 @@ def raw_diff(request,
     if diffset.name == 'diff':
         filename = "rb%d.patch" % review_request.display_id
     else:
-        filename = unicode(diffset.name).encode('ascii', 'ignore')
+        filename = six.text_type(diffset.name).encode('ascii', 'ignore')
 
     resp['Content-Disposition'] = 'inline; filename=%s' % filename
     set_last_modified(resp, diffset.timestamp)
@@ -1615,7 +1628,7 @@ class ReviewsSearchView(ListView):
 
     def get_context_data(self, **kwargs):
         query = self.request.GET.get('q', '')
-        context_data = super(ReviewsSearchView, self).get_context_data(kwargs)
+        context_data = super(ReviewsSearchView, self).get_context_data(**kwargs)
         context_data.update({
             'query': query,
             'extra_query': 'q=%s' % query,
@@ -1662,7 +1675,7 @@ class ReviewsSearchView(ListView):
 
         try:
             searcher = lucene.IndexSearcher(store)
-        except lucene.JavaError, e:
+        except lucene.JavaError as e:
             # FIXME: show a useful error
             raise e
 
@@ -1706,11 +1719,13 @@ def user_infobox(request, username,
 
     show_profile = user.is_profile_visible(request.user)
 
-    etag = ':'.join([user.first_name.encode('ascii', 'replace'),
-                     user.last_name.encode('ascii', 'replace'),
-                     user.email.encode('ascii', 'replace'),
-                     str(user.last_login), str(settings.AJAX_SERIAL),
-                     str(show_profile)])
+    etag = ':'.join([user.first_name,
+                     user.last_name,
+                     user.email,
+                     six.text_type(user.last_login),
+                     six.text_type(settings.AJAX_SERIAL),
+                     six.text_type(show_profile)])
+    etag = etag.encode('ascii', 'replace')
 
     if etag_if_none_match(request, etag):
         return HttpResponseNotModified()

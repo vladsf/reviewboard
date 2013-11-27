@@ -1,10 +1,13 @@
+from __future__ import unicode_literals
+
+
 # The version of Review Board.
 #
 # This is in the format of:
 #
 #   (Major, Minor, Micro, Patch, alpha/beta/rc/final, Release Number, Released)
 #
-VERSION = (1, 8, 0, 0, 'alpha', 0, False)
+VERSION = (2, 0, 0, 0, 'beta', 2, False)
 
 
 def get_version_string():
@@ -67,8 +70,8 @@ def initialize():
 
     from django.conf import settings
     from django.db import DatabaseError
-    from djblets.util.misc import generate_ajax_serial
     from djblets import log
+    from djblets.cache.serials import generate_ajax_serial
 
     from reviewboard import signals
     from reviewboard.extensions.base import get_extension_manager

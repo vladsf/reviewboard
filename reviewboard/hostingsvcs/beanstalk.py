@@ -1,10 +1,13 @@
+from __future__ import unicode_literals
+
 import json
 import os
-from urllib import quote
-from urllib2 import HTTPError, URLError
 
 from django import forms
 from django.utils.translation import ugettext_lazy as _
+from djblets.util.compat import six
+from djblets.util.compat.six.moves.urllib.error import HTTPError, URLError
+from djblets.util.compat.six.moves.urllib.parse import quote
 
 from reviewboard.hostingsvcs.forms import HostingServiceForm
 from reviewboard.hostingsvcs.service import HostingService
@@ -158,7 +161,7 @@ class Beanstalk(HostingService):
                 return data
             else:
                 return json.loads(data)
-        except HTTPError, e:
+        except HTTPError as e:
             data = e.read()
 
             try:
@@ -169,4 +172,4 @@ class Beanstalk(HostingService):
             if rsp and 'errors' in rsp:
                 raise Exception('; '.join(rsp['errors']))
             else:
-                raise Exception(str(e))
+                raise Exception(six.text_type(e))

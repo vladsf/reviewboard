@@ -1,11 +1,10 @@
+from __future__ import unicode_literals
+
 import logging
-try:
-    from cStringIO import StringIO
-except ImportError:
-    from StringIO import StringIO
 from xml.dom.minidom import parseString
 
-from djblets.util.misc import cache_memoize
+from djblets.cache.backend import cache_memoize
+from djblets.util.compat.six.moves import cStringIO as StringIO
 import markdown
 
 from reviewboard.reviews.ui.base import FileAttachmentReviewUI
@@ -60,7 +59,7 @@ class MarkdownReviewUI(FileAttachmentReviewUI):
             document = parseString('<html>%s</html>' % self.render())
             child_node = document.childNodes[0].childNodes[child_id]
             return child_node.toxml()
-        except Exception, e:
+        except Exception as e:
             logging.warning("Failure to create comment thumbnail for markdown "
                             "file attachment pk=%d: %s" % (self.obj.pk, e))
             return ''

@@ -1,9 +1,12 @@
+from __future__ import unicode_literals
+
 import re
 
 from django.contrib import auth
 from django.contrib.auth.models import User
 from django.core.exceptions import PermissionDenied
 from django.db.models import Q
+from django.utils import six
 from djblets.util.decorators import augment_method_from
 from djblets.webapi.decorators import (webapi_login_required,
                                        webapi_response_errors,
@@ -16,10 +19,11 @@ from reviewboard.reviews.models import Group, ReviewRequest, ReviewRequestDraft
 from reviewboard.webapi.base import WebAPIResource
 from reviewboard.webapi.decorators import webapi_check_local_site
 from reviewboard.webapi.encoder import status_to_string
+from reviewboard.webapi.mixins import MarkdownFieldsMixin
 from reviewboard.webapi.resources import resources
 
 
-class ReviewRequestDraftResource(WebAPIResource):
+class ReviewRequestDraftResource(MarkdownFieldsMixin, WebAPIResource):
     """An editable draft of a review request.
 
     This resource is used to actually modify a review request. Anything made
@@ -58,17 +62,17 @@ class ReviewRequestDraftResource(WebAPIResource):
             'mutable': False,
         },
         'last_updated': {
-            'type': str,
+            'type': six.text_type,
             'description': 'The date and time that the draft was last updated '
                            '(in YYYY-MM-DD HH:MM:SS format).',
             'mutable': False,
         },
         'branch': {
-            'type': str,
+            'type': six.text_type,
             'description': 'The branch name.',
         },
         'bugs_closed': {
-            'type': str,
+            'type': six.text_type,
             'description': 'The new list of bugs closed or referenced by this '
                            'change.',
         },
@@ -79,13 +83,13 @@ class ReviewRequestDraftResource(WebAPIResource):
                            'review request depends on.',
         },
         'changedescription': {
-            'type': str,
+            'type': six.text_type,
             'description': 'A custom description of what changes are being '
                            'made in this update. It often will be used to '
                            'describe the changes in the diff.',
         },
         'description': {
-            'type': str,
+            'type': six.text_type,
             'description': 'The new review request description.',
         },
         'public': {
@@ -102,21 +106,21 @@ class ReviewRequestDraftResource(WebAPIResource):
                            'in rich-text (Markdown) format.',
         },
         'summary': {
-            'type': str,
+            'type': six.text_type,
             'description': 'The new review request summary.',
         },
         'target_groups': {
-            'type': str,
+            'type': six.text_type,
             'description': 'A comma-separated list of review groups '
                            'that will be on the reviewer list.',
         },
         'target_people': {
-            'type': str,
+            'type': six.text_type,
             'description': 'A comma-separated list of users that will '
                            'be on a reviewer list.',
         },
         'testing_done': {
-            'type': str,
+            'type': six.text_type,
             'description': 'The new testing done text.',
         },
     }
@@ -171,24 +175,24 @@ class ReviewRequestDraftResource(WebAPIResource):
     @webapi_request_fields(
         optional={
             'branch': {
-                'type': str,
+                'type': six.text_type,
                 'description': 'The new branch name.',
             },
             'bugs_closed': {
-                'type': str,
+                'type': six.text_type,
                 'description': 'A comma-separated list of bug IDs.',
             },
             'depends_on': {
-                'type': str,
+                'type': six.text_type,
                 'description': 'The new list of dependencies of this review '
                                'request.',
             },
             'changedescription': {
-                'type': str,
+                'type': six.text_type,
                 'description': 'The change description for this update.',
             },
             'description': {
-                'type': str,
+                'type': six.text_type,
                 'description': 'The new review request description.',
             },
             'public': {
@@ -205,21 +209,21 @@ class ReviewRequestDraftResource(WebAPIResource):
                                '(Markdown) format.',
             },
             'summary': {
-                'type': str,
+                'type': six.text_type,
                 'description': 'The new review request summary.',
             },
             'target_groups': {
-                'type': str,
+                'type': six.text_type,
                 'description': 'A comma-separated list of review groups '
                                'that will be on the reviewer list.',
             },
             'target_people': {
-                'type': str,
+                'type': six.text_type,
                 'description': 'A comma-separated list of users that will '
                                'be on a reviewer list.',
             },
             'testing_done': {
-                'type': str,
+                'type': six.text_type,
                 'description': 'The new testing done text.',
             },
         },
@@ -257,24 +261,24 @@ class ReviewRequestDraftResource(WebAPIResource):
     @webapi_request_fields(
         optional={
             'branch': {
-                'type': str,
+                'type': six.text_type,
                 'description': 'The new branch name.',
             },
             'bugs_closed': {
-                'type': str,
+                'type': six.text_type,
                 'description': 'A comma-separated list of bug IDs.',
             },
             'depends_on': {
-                'type': str,
+                'type': six.text_type,
                 'description': 'The new list of dependencies of this review '
                                'request.',
             },
             'changedescription': {
-                'type': str,
+                'type': six.text_type,
                 'description': 'The change description for this update.',
             },
             'description': {
-                'type': str,
+                'type': six.text_type,
                 'description': 'The new review request description.',
             },
             'public': {
@@ -292,21 +296,21 @@ class ReviewRequestDraftResource(WebAPIResource):
                                '(Markdown) format.',
             },
             'summary': {
-                'type': str,
+                'type': six.text_type,
                 'description': 'The new review request summary.',
             },
             'target_groups': {
-                'type': str,
+                'type': six.text_type,
                 'description': 'A comma-separated list of review groups '
                                'that will be on the reviewer list.',
             },
             'target_people': {
-                'type': str,
+                'type': six.text_type,
                 'description': 'A comma-separated list of users that will '
                                'be on a reviewer list.',
             },
             'testing_done': {
-                'type': str,
+                'type': six.text_type,
                 'description': 'The new testing done text.',
             },
         },
@@ -351,7 +355,7 @@ class ReviewRequestDraftResource(WebAPIResource):
         old_changedesc_rich_text = (draft.changedesc_id is not None and
                                     draft.changedesc.rich_text)
 
-        for field_name, field_info in self.fields.iteritems():
+        for field_name, field_info in six.iteritems(self.fields):
             if (field_info.get('mutable', True) and
                 kwargs.get(field_name, None) is not None):
                 field_result, field_modified_objects, invalid = \
@@ -364,30 +368,22 @@ class ReviewRequestDraftResource(WebAPIResource):
                 elif field_modified_objects:
                     modified_objects += field_modified_objects
 
-        if 'rich_text' in kwargs:
-            rich_text = kwargs['rich_text']
+        if draft.changedesc_id:
+            changedesc = draft.changedesc
+            modified_objects.append(draft.changedesc)
 
-            # If the caller has changed the rich_text setting, we will need to
-            # update any affected fields we already have stored that weren't
-            # changed in this request by escaping or unescaping their
-            # contents.
-            if rich_text != old_rich_text:
-                for text_field in ('description', 'testing_done'):
-                    if text_field not in kwargs:
-                        markdown_set_field_escaped(draft, text_field,
-                                                   rich_text)
+            if 'rich_text' in kwargs:
+                changedesc.rich_text = kwargs['rich_text']
 
-            if draft.changedesc_id and rich_text != old_changedesc_rich_text:
-                changedesc = draft.changedesc
-                changedesc.rich_text = rich_text
+            self.normalize_markdown_fields(changedesc, ['changedescription'],
+                                           old_changedesc_rich_text,
+                                           model_field_map={
+                                               'changedescription': 'text',
+                                           },
+                                           **kwargs)
 
-                if 'changedescription' not in kwargs:
-                    # The change description's rich_text was not necessarily
-                    # in sync with the draft's, so we're handling all this
-                    # separately.
-                    markdown_set_field_escaped(changedesc, 'text', rich_text)
-
-                modified_objects.append(draft.changedesc)
+        self.normalize_markdown_fields(draft, ['description', 'testing_done'],
+                                       old_rich_text, **kwargs)
 
         if always_save or not invalid_fields:
             for obj in set(modified_objects):

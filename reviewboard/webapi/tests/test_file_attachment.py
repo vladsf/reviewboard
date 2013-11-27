@@ -1,3 +1,6 @@
+from __future__ import unicode_literals
+
+from djblets.util.compat import six
 from djblets.webapi.errors import PERMISSION_DENIED
 
 from reviewboard.attachments.models import FileAttachment
@@ -12,10 +15,9 @@ from reviewboard.webapi.tests.urls import (get_file_attachment_item_url,
                                            get_file_attachment_list_url)
 
 
+@six.add_metaclass(BasicTestsMetaclass)
 class ResourceListTests(ReviewRequestChildListMixin, BaseWebAPITestCase):
     """Testing the FileAttachmentResource list APIs."""
-    __metaclass__ = BasicTestsMetaclass
-
     fixtures = ['test_users']
     basic_get_fixtures = ['test_scmtools']
     sample_api_url = 'review-requests/<id>/file-attachments/'
@@ -110,25 +112,23 @@ class ResourceListTests(ReviewRequestChildListMixin, BaseWebAPITestCase):
         review_request = self.create_review_request()
         self.assertNotEqual(review_request.submitter, self.user)
 
-        f = open(self._getTrophyFilename(), "r")
-        self.assertTrue(f)
-        rsp = self.apiPost(
-            get_file_attachment_list_url(review_request),
-            {
-                'caption': 'Trophy',
-                'path': f,
-            },
-            expected_status=403)
-        f.close()
+        with open(self._getTrophyFilename(), "r") as f:
+            self.assertTrue(f)
+            rsp = self.apiPost(
+                get_file_attachment_list_url(review_request),
+                {
+                    'caption': 'Trophy',
+                    'path': f,
+                },
+                expected_status=403)
 
         self.assertEqual(rsp['stat'], 'fail')
         self.assertEqual(rsp['err']['code'], PERMISSION_DENIED.code)
 
 
+@six.add_metaclass(BasicTestsMetaclass)
 class ResourceItemTests(ReviewRequestChildItemMixin, BaseWebAPITestCase):
     """Testing the FileAttachmentResource item APIs."""
-    __metaclass__ = BasicTestsMetaclass
-
     fixtures = ['test_users']
     sample_api_url = 'review-requests/<id>/file-attachments/<id>/'
     resource = resources.file_attachment
@@ -142,6 +142,8 @@ class ResourceItemTests(ReviewRequestChildItemMixin, BaseWebAPITestCase):
     def compare_item(self, item_rsp, attachment):
         self.assertEqual(item_rsp['id'], attachment.pk)
         self.assertEqual(item_rsp['filename'], attachment.filename)
+        self.assertEqual(item_rsp['absolute_url'],
+                         self.base_url + attachment.get_absolute_url())
 
     #
     # HTTP DELETE tests

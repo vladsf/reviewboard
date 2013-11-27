@@ -1,3 +1,5 @@
+from __future__ import print_function, unicode_literals
+
 from datetime import timedelta
 import logging
 import os
@@ -7,6 +9,7 @@ from django.contrib.auth.models import AnonymousUser, User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.urlresolvers import reverse
 from django.template import Context, Template
+from django.utils import six
 from djblets.siteconfig.models import SiteConfiguration
 from djblets.testing.decorators import add_fixtures
 from kgb import SpyAgency
@@ -511,17 +514,16 @@ class ReviewRequestManagerTests(TestCase):
             ])
 
     def assertValidSummaries(self, review_requests, summaries):
-        print review_requests
         r_summaries = [r.summary for r in review_requests]
 
         for summary in r_summaries:
             self.assertTrue(summary in summaries,
-                            u'summary "%s" not found in summary list'
+                            'summary "%s" not found in summary list'
                             % summary)
 
         for summary in summaries:
             self.assertTrue(summary in r_summaries,
-                            u'summary "%s" not found in review request list'
+                            'summary "%s" not found in review request list'
                             % summary)
 
 
@@ -1196,15 +1198,15 @@ class ViewTests(TestCase):
             source_revision='6bba278',
             dest_detail='465d217',
             diff=(
-                'diff --git a/diffutils.py b/diffutils.py\n'
-                'index 6bba278..465d217 100644\n'
-                '--- a/diffutils.py\n'
-                '+++ b/diffutils.py\n'
-                '@@ -1,3 +1,4 @@\n'
-                '+# diffutils.py\n'
-                ' import fnmatch\n'
-                ' import os\n'
-                ' import re\n'
+                b'diff --git a/diffutils.py b/diffutils.py\n'
+                b'index 6bba278..465d217 100644\n'
+                b'--- a/diffutils.py\n'
+                b'+++ b/diffutils.py\n'
+                b'@@ -1,3 +1,4 @@\n'
+                b'+# diffutils.py\n'
+                b' import fnmatch\n'
+                b' import os\n'
+                b' import re\n'
             ))
         self.create_filediff(
             diffset,
@@ -1213,14 +1215,14 @@ class ViewTests(TestCase):
             source_revision='d6613f5',
             dest_detail='5b50866',
             diff=(
-                'diff --git a/readme b/readme\n'
-                'index d6613f5..5b50866 100644\n'
-                '--- a/readme\n'
-                '+++ b/readme\n'
-                '@@ -1 +1,3 @@\n'
-                ' Hello there\n'
-                '+\n'
-                '+Oh hi!\n'
+                b'diff --git a/readme b/readme\n'
+                b'index d6613f5..5b50866 100644\n'
+                b'--- a/readme\n'
+                b'+++ b/readme\n'
+                b'@@ -1 +1,3 @@\n'
+                b' Hello there\n'
+                b'+\n'
+                b'+Oh hi!\n'
             ))
         self.create_filediff(
             diffset,
@@ -1229,13 +1231,13 @@ class ViewTests(TestCase):
             source_revision='PRE-CREATION',
             dest_detail='',
             diff=(
-                'diff --git a/new_file b/new_file\n'
-                'new file mode 100644\n'
-                'index 0000000..ac30bd3\n'
-                '--- /dev/null\n'
-                '+++ b/new_file\n'
-                '@@ -0,0 +1 @@\n'
-                '+This is a new file!\n'
+                b'diff --git a/new_file b/new_file\n'
+                b'new file mode 100644\n'
+                b'index 0000000..ac30bd3\n'
+                b'--- /dev/null\n'
+                b'+++ b/new_file\n'
+                b'@@ -0,0 +1 @@\n'
+                b'+This is a new file!\n'
             ))
 
         diffset = self.create_diffset(review_request, revision=2)
@@ -1246,15 +1248,15 @@ class ViewTests(TestCase):
             source_revision='6bba278',
             dest_detail='465d217',
             diff=(
-                'diff --git a/diffutils.py b/diffutils.py\n'
-                'index 6bba278..465d217 100644\n'
-                '--- a/diffutils.py\n'
-                '+++ b/diffutils.py\n'
-                '@@ -1,3 +1,4 @@\n'
-                '+# diffutils.py\n'
-                ' import fnmatch\n'
-                ' import os\n'
-                ' import re\n'
+                b'diff --git a/diffutils.py b/diffutils.py\n'
+                b'index 6bba278..465d217 100644\n'
+                b'--- a/diffutils.py\n'
+                b'+++ b/diffutils.py\n'
+                b'@@ -1,3 +1,4 @@\n'
+                b'+# diffutils.py\n'
+                b' import fnmatch\n'
+                b' import os\n'
+                b' import re\n'
             ))
         self.create_filediff(
             diffset,
@@ -1263,14 +1265,14 @@ class ViewTests(TestCase):
             source_revision='d6613f5',
             dest_detail='5b50867',
             diff=(
-                'diff --git a/readme b/readme\n'
-                'index d6613f5..5b50867 100644\n'
-                '--- a/readme\n'
-                '+++ b/readme\n'
-                '@@ -1 +1,3 @@\n'
-                ' Hello there\n'
-                '+----------\n'
-                '+Oh hi!\n'
+                b'diff --git a/readme b/readme\n'
+                b'index d6613f5..5b50867 100644\n'
+                b'--- a/readme\n'
+                b'+++ b/readme\n'
+                b'@@ -1 +1,3 @@\n'
+                b' Hello there\n'
+                b'+----------\n'
+                b'+Oh hi!\n'
             ))
         self.create_filediff(
             diffset,
@@ -1279,21 +1281,21 @@ class ViewTests(TestCase):
             source_revision='PRE-CREATION',
             dest_detail='',
             diff=(
-                'diff --git a/new_file b/new_file\n'
-                'new file mode 100644\n'
-                'index 0000000..ac30bd4\n'
-                '--- /dev/null\n'
-                '+++ b/new_file\n'
-                '@@ -0,0 +1 @@\n'
-                '+This is a diffent version of this new file!\n'
+                b'diff --git a/new_file b/new_file\n'
+                b'new file mode 100644\n'
+                b'index 0000000..ac30bd4\n'
+                b'--- /dev/null\n'
+                b'+++ b/new_file\n'
+                b'@@ -0,0 +1 @@\n'
+                b'+This is a diffent version of this new file!\n'
             ))
 
         response = self.client.get('/r/1/diff/1-2/')
 
         # Useful for debugging any actual errors here.
         if response.status_code != 200:
-            print "Error: %s" % self.getContextVar(response, 'error')
-            print self.getContextVar(response, 'trace')
+            print("Error: %s" % self.getContextVar(response, 'error'))
+            print(self.getContextVar(response, 'trace'))
 
         self.assertEqual(response.status_code, 200)
 
@@ -1324,15 +1326,15 @@ class ViewTests(TestCase):
             source_revision='6bba278',
             dest_detail='465d217',
             diff=(
-                'diff --git a/diffutils.py b/diffutils.py\n'
-                'index 6bba278..465d217 100644\n'
-                '--- a/diffutils.py\n'
-                '+++ b/diffutils.py\n'
-                '@@ -1,3 +1,4 @@\n'
-                '+# diffutils.py\n'
-                ' import fnmatch\n'
-                ' import os\n'
-                ' import re\n'
+                b'diff --git a/diffutils.py b/diffutils.py\n'
+                b'index 6bba278..465d217 100644\n'
+                b'--- a/diffutils.py\n'
+                b'+++ b/diffutils.py\n'
+                b'@@ -1,3 +1,4 @@\n'
+                b'+# diffutils.py\n'
+                b' import fnmatch\n'
+                b' import os\n'
+                b' import re\n'
             ))
 
         diffset = self.create_diffset(review_request, revision=2)
@@ -1343,15 +1345,15 @@ class ViewTests(TestCase):
             source_revision='6bba278',
             dest_detail='465d217',
             diff=(
-                'diff --git a/diffutils.py b/diffutils.py\n'
-                'index 6bba278..465d217 100644\n'
-                '--- a/diffutils.py\n'
-                '+++ b/diffutils.py\n'
-                '@@ -1,3 +1,4 @@\n'
-                '+# diffutils.py\n'
-                ' import fnmatch\n'
-                ' import os\n'
-                ' import re\n'
+                b'diff --git a/diffutils.py b/diffutils.py\n'
+                b'index 6bba278..465d217 100644\n'
+                b'--- a/diffutils.py\n'
+                b'+++ b/diffutils.py\n'
+                b'@@ -1,3 +1,4 @@\n'
+                b'+# diffutils.py\n'
+                b' import fnmatch\n'
+                b' import os\n'
+                b' import re\n'
             ))
         self.create_filediff(
             diffset,
@@ -1360,21 +1362,21 @@ class ViewTests(TestCase):
             source_revision='PRE-CREATION',
             dest_detail='',
             diff=(
-                'diff --git a/new_file b/new_file\n'
-                'new file mode 100644\n'
-                'index 0000000..ac30bd4\n'
-                '--- /dev/null\n'
-                '+++ b/new_file\n'
-                '@@ -0,0 +1 @@\n'
-                '+This is a diffent version of this new file!\n'
+                b'diff --git a/new_file b/new_file\n'
+                b'new file mode 100644\n'
+                b'index 0000000..ac30bd4\n'
+                b'--- /dev/null\n'
+                b'+++ b/new_file\n'
+                b'@@ -0,0 +1 @@\n'
+                b'+This is a diffent version of this new file!\n'
             ))
 
         response = self.client.get('/r/1/diff/1-2/')
 
         # Useful for debugging any actual errors here.
         if response.status_code != 200:
-            print "Error: %s" % self.getContextVar(response, 'error')
-            print self.getContextVar(response, 'trace')
+            print("Error: %s" % self.getContextVar(response, 'error'))
+            print(self.getContextVar(response, 'trace'))
 
         self.assertEqual(response.status_code, 200)
 
@@ -1522,7 +1524,7 @@ class FieldTests(TestCase):
         """Testing review requests with no summary"""
         from django.template.defaultfilters import lower
         review_request = ReviewRequest()
-        lower(unicode(review_request))
+        lower(review_request)
 
     @add_fixtures(['test_users'])
     def test_commit_id(self):
@@ -1532,7 +1534,7 @@ class FieldTests(TestCase):
 
         self.assertEqual(review_request.commit_id, None)
         self.assertEqual(review_request.commit,
-                         str(review_request.changenum))
+                         six.text_type(review_request.changenum))
         self.assertNotEqual(review_request.commit_id, None)
 
 
@@ -1561,9 +1563,8 @@ class PostCommitTests(SpyAgency, TestCase):
             commit.message = \
                 'This is my commit message\n\nWith a summary line too.'
             diff_filename = os.path.join(self.testdata_dir, 'git_readme.diff')
-            f = open(diff_filename, 'r')
-            commit.diff = f.read()
-            f.close()
+            with open(diff_filename, 'r') as f:
+                commit.diff = f.read()
 
             return commit
 
@@ -1590,6 +1591,33 @@ class PostCommitTests(SpyAgency, TestCase):
         fileDiff = diffset.files.get()
         self.assertEqual(fileDiff.source_file, '/readme')
         self.assertEqual(fileDiff.source_revision, 'd6613f5')
+
+    def test_update_from_committed_change_with_markdown_escaping(self):
+        """Testing post-commit update with markdown escaping"""
+        def get_change(repository, commit_to_get):
+            commit = Commit()
+            commit.message = '* No escaping\n\n* but this needs escaping'
+            diff_filename = os.path.join(self.testdata_dir, 'git_readme.diff')
+            with open(diff_filename, 'r') as f:
+                commit.diff = f.read()
+
+            return commit
+
+        def get_file_exists(repository, path, revision, base_commit_id=None,
+                            request=None):
+            return (path, revision) in [('/readme', 'd6613f5')]
+
+        self.spy_on(self.repository.get_change, call_fake=get_change)
+        self.spy_on(self.repository.get_file_exists, call_fake=get_file_exists)
+
+        review_request = ReviewRequest.objects.create(self.user,
+                                                      self.repository)
+        review_request.rich_text = True
+        review_request.update_from_commit_id('4')
+
+        self.assertEqual(review_request.summary, '* No escaping')
+        self.assertEqual(review_request.description,
+                         '\\* but this needs escaping')
 
     def test_update_from_committed_change_without_repository_support(self):
         """Testing post-commit update failure conditions"""
@@ -1852,7 +1880,7 @@ class IfNeatNumberTagTests(TestCase):
     def assertNeatNumberResult(self, rid, expected):
         t = Template(
             "{% load reviewtags %}"
-            "{% ifneatnumber " + str(rid) + " %}"
+            "{% ifneatnumber " + six.text_type(rid) + " %}"
             "{%  if milestone %}milestone{% else %}"
             "{%  if palindrome %}palindrome{% endif %}{% endif %}"
             "{% endifneatnumber %}")
@@ -2605,16 +2633,16 @@ class UserInfoboxTests(TestCase):
     def testUnicode(self):
         """Testing user_infobox with a user with non-ascii characters"""
         user = User.objects.create_user('test', 'test@example.com')
-        user.first_name = u'Test\u21b9'
-        user.last_name = u'User\u2729'
+        user.first_name = 'Test\u21b9'
+        user.last_name = 'User\u2729'
         user.save()
 
         self.client.get(local_site_reverse('user-infobox', args=['test']))
 
 
 class MarkdownUtilsTests(TestCase):
-    UNESCAPED_TEXT = '\\`*_{}[]()>#+-.!'
-    ESCAPED_TEXT = '\\\\\\`\\*\\_\\{\\}\\[\\]\\(\\)\\>\\#\\+\\-.\\!'
+    UNESCAPED_TEXT = r'\`*_{}[]()>#+-.!'
+    ESCAPED_TEXT = r'\\\`\*\_\{\}\[\]\(\)\>#+-.\!'
 
     def test_markdown_escape(self):
         """Testing markdown_escape"""
@@ -2632,6 +2660,40 @@ class MarkdownUtilsTests(TestCase):
              '1\\. Line. 2.\n'
              '1\\.2\\. Line. 3.\n'
              '  1\\. Line. 4.'))
+
+    def test_markdown_escape_atx_headers(self):
+        """Testing markdown_escape with '#' placement"""
+        self.assertEqual(
+            markdown_escape('### Header\n'
+                            '  ## Header ##\n'
+                            'Not # a header'),
+            ('\\#\\#\\# Header\n'
+             '  \\#\\# Header ##\n'
+             'Not # a header'))
+
+    def test_markdown_escape_hyphens(self):
+        """Testing markdown_escape with '-' placement"""
+        self.assertEqual(
+            markdown_escape('Header\n'
+                            '------\n'
+                            '\n'
+                            '- List item\n'
+                            '  - List item\n'
+                            'Just hyp-henated'),
+            ('Header\n'
+             '\\-\\-\\-\\-\\-\\-\n'
+             '\n'
+             '\\- List item\n'
+             '  \\- List item\n'
+             'Just hyp-henated'))
+
+    def test_markdown_escape_plusses(self):
+        """Testing markdown_escape with '+' placement"""
+        self.assertEqual(
+            markdown_escape('+ List item\n'
+                            'a + b'),
+            ('\\+ List item\n'
+             'a + b'))
 
     def test_markdown_unescape(self):
         """Testing markdown_unescape"""

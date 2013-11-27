@@ -1,6 +1,9 @@
+from __future__ import unicode_literals
+
 import os
 import subprocess
 
+from djblets.util.compat import six
 from djblets.util.filesystem import is_exe_in_path
 
 from reviewboard.diffviewer.parser import DiffParser
@@ -26,7 +29,7 @@ class MonotoneTool(SCMTool):
     def get_file(self, path, revision=None):
         # revision is actually the file id here...
         if not revision:
-            return ""
+            return b""
 
         return self.client.get_file(revision)
 
@@ -91,7 +94,7 @@ class MonotoneClient:
                              close_fds=(os.name != 'nt'))
 
         out = p.stdout.read()
-        err = p.stderr.read()
+        err = six.text_type(p.stderr.read())
         failure = p.wait()
 
         if not failure:

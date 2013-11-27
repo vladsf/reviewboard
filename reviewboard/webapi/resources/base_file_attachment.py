@@ -1,7 +1,10 @@
+from __future__ import unicode_literals
+
 import logging
 
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied
 from django.db.models import Q
+from djblets.util.compat import six
 from djblets.webapi.decorators import (webapi_login_required,
                                        webapi_response_errors,
                                        webapi_request_fields)
@@ -26,33 +29,42 @@ class BaseFileAttachmentResource(WebAPIResource):
             'description': 'The numeric ID of the file.',
         },
         'caption': {
-            'type': str,
+            'type': six.text_type,
             'description': "The file's descriptive caption.",
         },
         'filename': {
-            'type': str,
+            'type': six.text_type,
             'description': "The name of the file.",
         },
         'url': {
-            'type': str,
+            'type': six.text_type,
             'description': "The URL of the file, for downloading purposes. "
                            "If this is not an absolute URL, then it's "
-                           "relative to the Review Board server's URL.",
+                           "relative to the Review Board server's URL. "
+                           "This is deprecated and will be removed in a "
+                           "future version.",
+            'deprecated_in': '2.0',
+        },
+        'absolute_url': {
+            'type': six.text_type,
+            'description': "The absolute URL of the file, for downloading "
+                           "purposes.",
+            'added_in': '2.0',
         },
         'icon_url': {
-            'type': str,
+            'type': six.text_type,
             'description': 'The URL to a 24x24 icon representing this file.'
         },
         'mimetype': {
-            'type': str,
+            'type': six.text_type,
             'description': 'The mimetype for the file.',
         },
         'thumbnail': {
-            'type': str,
+            'type': six.text_type,
             'description': 'A thumbnail representing this file.',
         },
         'review_url': {
-            'type': str,
+            'type': six.text_type,
             'description': 'The URL to a review UI for this file.',
         },
     }
@@ -87,6 +99,9 @@ class BaseFileAttachmentResource(WebAPIResource):
 
     def serialize_url_field(self, obj, **kwargs):
         return obj.get_absolute_url()
+
+    def serialize_absolute_url_field(self, obj, request, **kwargs):
+        return request.build_absolute_uri(obj.get_absolute_url())
 
     def serialize_caption_field(self, obj, **kwargs):
         # We prefer 'caption' here, because when creating a new file
@@ -136,7 +151,7 @@ class BaseFileAttachmentResource(WebAPIResource):
         },
         optional={
             'caption': {
-                'type': str,
+                'type': six.text_type,
                 'description': 'The optional caption describing the '
                                'file.',
             },
@@ -178,10 +193,10 @@ class BaseFileAttachmentResource(WebAPIResource):
 
         try:
             file = form.create(request.FILES['path'], review_request)
-        except ValueError, e:
+        except ValueError as e:
             return INVALID_FORM_DATA, {
                 'fields': {
-                    'path': [str(e)],
+                    'path': [six.text_type(e)],
                 },
             }
 
@@ -195,11 +210,11 @@ class BaseFileAttachmentResource(WebAPIResource):
     @webapi_request_fields(
         optional={
             'caption': {
-                'type': str,
+                'type': six.text_type,
                 'description': 'The new caption for the file.',
             },
             'thumbnail': {
-                'type': str,
+                'type': six.text_type,
                 'description': 'The thumbnail data for the file.',
             },
         }
@@ -238,13 +253,13 @@ class BaseFileAttachmentResource(WebAPIResource):
         if thumbnail is not None:
             try:
                 file.thumbnail = thumbnail
-            except Exception, e:
+            except Exception as e:
                 logging.error(
                     'Failed to store thumbnail for attachment %d: %s',
                     file.pk, e, request=request)
                 return INVALID_FORM_DATA, {
                     'fields': {
-                        'thumbnail': [str(e)],
+                        'thumbnail': [six.text_type(e)],
                     }
                 }
 

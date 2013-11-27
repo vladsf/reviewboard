@@ -1,9 +1,11 @@
-from __future__ import with_statement
+from __future__ import unicode_literals
+
 import os
 import re
 import subprocess
 import tempfile
 
+from django.utils import six
 from django.utils.translation import ugettext as _
 from djblets.log import log_timed
 from djblets.siteconfig.models import SiteConfiguration
@@ -76,10 +78,9 @@ def patch(diff, file, filename, request=None):
         failure = p.wait()
 
     if failure:
-        f = open("%s.diff" %
-                 (os.path.join(tempdir, os.path.basename(filename))), "w")
-        f.write(diff)
-        f.close()
+        absolute_path = os.path.join(tempdir, os.path.basename(filename))
+        with open("%s.diff" % absolute_path, 'w') as f:
+            f.write(diff)
 
         log_timer.done()
 
@@ -97,9 +98,8 @@ def patch(diff, file, filename, request=None):
                 'output': patch_output,
             })
 
-    f = open(newfile, "r")
-    data = f.read()
-    f.close()
+    with open(newfile, "r") as f:
+        data = f.read()
 
     os.unlink(oldfile)
     os.unlink(newfile)
@@ -117,7 +117,7 @@ def get_original_file(filediff, request=None):
 
     SCM exceptions are passed back to the caller.
     """
-    data = ""
+    data = b""
 
     if filediff.source_revision != PRE_CREATION:
         repository = filediff.diffset.repository
@@ -240,7 +240,7 @@ def get_diff_files(diffset, filediff=None, interdiffset=None, request=None):
         # this.
         filediff_parts += [
             (interdiff, None, False)
-            for interdiff in interdiff_map.itervalues()
+            for interdiff in six.itervalues(interdiff_map)
         ]
 
     files = []
