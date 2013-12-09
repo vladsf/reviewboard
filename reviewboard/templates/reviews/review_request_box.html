@@ -27,8 +27,8 @@
 {%  endif %}
 {%  if latest_diffset %}
 {%   blocktrans %}
-   - Latest diff uploaded {{lastdiffdate}}
-   (<time class="timesince" datetime="{{lastdiffdateraw}}">{{lastdiffdate}}</time>)
+   - Latest diff uploaded
+   <time class="timesince" datetime="{{lastdiffdateraw}}">{{lastdiffdate}}</time>
 {%   endblocktrans %}
 {%  endif %}
 {% endwith %}
