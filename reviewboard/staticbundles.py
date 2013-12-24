@@ -22,7 +22,7 @@ PIPELINE_JS = dict({
             'lib/js/ui.autocomplete.js',
             'lib/js/google-code-prettify/prettify.js',
             'lib/js/marked.js',
-            'lib/js/codemirror-3.19.min.js',
+            'lib/js/codemirror-3.20.min.js',
         ),
         'output_filename': 'lib/js/3rdparty.min.js',
     },
@@ -68,7 +68,6 @@ PIPELINE_JS = dict({
             'rb/js/utils/tests/keyBindingUtilsTests.js',
             'rb/js/utils/tests/linkifyUtilsTests.js',
             'rb/js/utils/tests/propertyUtilsTests.js',
-            'rb/js/utils/tests/textUtilsTests.js',
             'rb/js/views/tests/collectionViewTests.js',
             'rb/js/views/tests/commentDialogViewTests.js',
             'rb/js/views/tests/commentIssueBarViewTests.js',
@@ -126,6 +125,13 @@ PIPELINE_JS = dict({
             'rb/js/models/userSessionModel.js',
         ),
         'output_filename': 'rb/js/base.min.js',
+    },
+    'dashboard': {
+        'source_filenames': (
+            'rb/js/dashboard/models/dashboardModel.js',
+            'rb/js/dashboard/views/dashboardView.js',
+        ),
+        'output_filename': 'rb/js/dashboard.min.js',
     },
     'reviews': {
         'source_filenames': (

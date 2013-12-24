@@ -7,9 +7,11 @@ from django.db import models
 from django.utils import timezone
 from django.utils.encoding import python_2_unicode_compatible
 from django.utils.translation import ugettext_lazy as _
-from djblets.db.fields import Base64Field
+from djblets.db.fields import Base64Field, JSONField
 
-from reviewboard.diffviewer.managers import FileDiffDataManager, DiffSetManager
+from reviewboard.diffviewer.managers import (FileDiffDataManager,
+                                             FileDiffManager,
+                                             DiffSetManager)
 from reviewboard.scmtools.core import PRE_CREATION
 from reviewboard.scmtools.models import Repository
 
@@ -24,10 +26,23 @@ class FileDiffData(models.Model):
     binary = Base64Field(_("base64"))
     objects = FileDiffDataManager()
 
-    # These are null by default so that we don't get counts of 0 for older
-    # changes.
-    insert_count = models.IntegerField(null=True, blank=True)
-    delete_count = models.IntegerField(null=True, blank=True)
+    extra_data = JSONField(null=True)
+
+    @property
+    def insert_count(self):
+        return self.extra_data.get('insert_count')
+
+    @insert_count.setter
+    def insert_count(self, value):
+        self.extra_data['insert_count'] = value
+
+    @property
+    def delete_count(self):
+        return self.extra_data.get('delete_count')
+
+    @delete_count.setter
+    def delete_count(self, value):
+        self.extra_data['delete_count'] = value
 
     def recalculate_line_counts(self, tool):
         """Recalculates the insert_count and delete_count values.
@@ -88,6 +103,10 @@ class FileDiff(models.Model):
                                          related_name='parent_filediff_set')
     status = models.CharField(_("status"), max_length=1, choices=STATUSES)
 
+    extra_data = JSONField(null=True)
+
+    objects = FileDiffManager()
+
     @property
     def source_file_display(self):
         tool = self.diffset.repository.get_scmtool()
@@ -124,6 +143,8 @@ class FileDiff(models.Model):
             binary_hash=hashkey, defaults={'binary': diff})
         self.diff64 = ""
 
+        return is_new
+
     diff = property(_get_diff, _set_diff)
 
     def _get_parent_diff(self):
@@ -143,6 +164,10 @@ class FileDiff(models.Model):
             self.parent_diff_hash, is_new = FileDiffData.objects.get_or_create(
                 binary_hash=hashkey, defaults={'binary': parent_diff})
             self.parent_diff64 = ""
+
+            return is_new
+        else:
+            return False
 
     parent_diff = property(_get_parent_diff, _set_parent_diff)
 
@@ -205,12 +230,14 @@ class FileDiff(models.Model):
     def _migrate_diff_data(self, recalculate_counts=True):
         """Migrates the data stored in the FileDiff to a FileDiffData."""
         needs_save = False
+        diff_hash_is_new = False
+        parent_diff_hash_is_new = False
 
         if not self.diff_hash:
             logging.debug('Migrating FileDiff %s diff data to FileDiffData'
                           % self.pk)
             needs_save = True
-            self._set_diff(self.diff64)
+            diff_hash_is_new = self._set_diff(self.diff64)
 
             if recalculate_counts:
                 self._recalculate_line_counts(self.diff_hash)
@@ -219,13 +246,15 @@ class FileDiff(models.Model):
             logging.debug('Migrating FileDiff %s parent_diff data to '
                           'FileDiffData' % self.pk)
             needs_save = True
-            self._set_parent_diff(self.parent_diff64)
+            parent_diff_hash_is_new = self._set_parent_diff(self.parent_diff64)
 
             if recalculate_counts:
                 self._recalculate_line_counts(self.parent_diff_hash)
 
         if needs_save:
             self.save()
+
+        return diff_hash_is_new, parent_diff_hash_is_new
 
     def _recalculate_line_counts(self, diff_hash):
         """Recalculates the line counts on the specified FileDiffData.
@@ -264,6 +293,8 @@ class DiffSet(models.Model):
     base_commit_id = models.CharField(
         _('commit ID'), max_length=64, blank=True, null=True, db_index=True,
         help_text=_('The ID/revision this change is built upon.'))
+
+    extra_data = JSONField(null=True)
 
     objects = DiffSetManager()
 
@@ -311,6 +342,8 @@ class DiffSetHistory(models.Model):
         blank=True,
         null=True,
         default=None)
+
+    extra_data = JSONField(null=True)
 
     def __str__(self):
         return 'Diff Set History (%s revisions)' % self.diffsets.count()

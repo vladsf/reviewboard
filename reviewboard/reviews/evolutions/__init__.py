@@ -21,4 +21,6 @@ SEQUENCE = [
     'file_attachment_comment_diff_id',
     'rich_text',
     'base_comment_extra_data',
+    'unique_together_baseline',
+    'extra_data',
 ]

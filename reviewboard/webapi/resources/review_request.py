@@ -42,6 +42,7 @@ from reviewboard.webapi.errors import (CHANGE_NUMBER_IN_USE,
                                        MISSING_REPOSITORY,
                                        REPO_AUTHENTICATION_ERROR,
                                        REPO_INFO_ERROR)
+from reviewboard.webapi.mixins import MarkdownFieldsMixin
 from reviewboard.webapi.resources import resources
 from reviewboard.webapi.resources.repository import RepositoryResource
 from reviewboard.webapi.resources.review_group import ReviewGroupResource
@@ -50,7 +51,7 @@ from reviewboard.webapi.resources.review_request_draft import \
 from reviewboard.webapi.resources.user import UserResource
 
 
-class ReviewRequestResource(WebAPIResource):
+class ReviewRequestResource(MarkdownFieldsMixin, WebAPIResource):
     """Provides information on review requests.
 
     Review requests are one of the central concepts in Review Board. They
@@ -65,9 +66,13 @@ class ReviewRequestResource(WebAPIResource):
     then be updated, again through the Review Request Draft resource, or closed
     as submitted or discarded.
 
-    If the ``rich_text`` field is set to true, then the ``description`` and
-    ``testing_done`` fields should be interpreted by the client as Markdown
+    If the ``text_type`` field is set to ``markdown``, then the ``description``
+    and ``testing_done`` fields should be interpreted by the client as Markdown
     text.
+
+    The returned text in the payload can be provided in a different format
+    by passing ``?force-text-type=`` in the request. This accepts all the
+    possible values listed in the ``text_type`` field below.
     """
     model = ReviewRequest
     name = 'review_request'
@@ -89,6 +94,11 @@ class ReviewRequestResource(WebAPIResource):
             'description': 'The list of review requests that this '
                            'review request depends on.',
         },
+        'extra_data': {
+            'type': dict,
+            'description': 'Extra data as part of the review request. '
+                           'This can be set by the API or extensions.',
+        },
         'submitter': {
             'type': UserResource,
             'description': 'The user who submitted the review request.',
@@ -103,11 +113,10 @@ class ReviewRequestResource(WebAPIResource):
             'description': 'The date and time that the review request was '
                            'last updated (in YYYY-MM-DD HH:MM:SS format).',
         },
-        'rich_text': {
-            'type': bool,
-            'description': 'Whether or not the review request description '
-                           'and testing_done fields are in rich-text '
-                           '(Markdown) format.',
+        'text_type': {
+            'type': MarkdownFieldsMixin.TEXT_TYPES,
+            'description': 'The mode for the review request description '
+                           'and testing_done fields.',
         },
         'status': {
             'type': ('discarded', 'pending', 'submitted'),
@@ -413,6 +422,12 @@ class ReviewRequestResource(WebAPIResource):
     def serialize_commit_id_field(self, obj, **kwargs):
         return obj.commit
 
+    def serialize_description_field(self, obj, **kwargs):
+        return self.normalize_text(obj, obj.description, **kwargs)
+
+    def serialize_testing_done_field(self, obj, **kwargs):
+        return self.normalize_text(obj, obj.testing_done, **kwargs)
+
     @webapi_check_local_site
     @webapi_login_required
     @webapi_response_errors(NOT_LOGGED_IN, PERMISSION_DENIED, INVALID_USER,
@@ -450,9 +465,12 @@ class ReviewRequestResource(WebAPIResource):
                                'the "reviews.can_submit_as_another_user" '
                                'permission.',
             },
-        })
+        },
+        allow_unknown=True
+    )
     def create(self, request, repository=None, submit_as=None, changenum=None,
-               commit_id=None, local_site_name=None, *args, **kwargs):
+               commit_id=None, local_site_name=None, extra_fields={},
+               *args, **kwargs):
         """Creates a new review request.
 
         The new review request will start off as private and pending, and
@@ -482,6 +500,11 @@ class ReviewRequestResource(WebAPIResource):
         ``reviews.can_submit_as_another_user`` permission set. This capability
         is useful when writing automation scripts, such as post-commit hooks,
         that need to create review requests for another user.
+
+        Extra data can be stored on the review request for later lookup by
+        passing ``extra_data.key_name=value``. The ``key_name`` and ``value``
+        can be any valid strings. Passing a blank ``value`` will remove the
+        key.  The ``extra_data.`` prefix is required.
         """
         user = request.user
         local_site = self._get_local_site(local_site_name)
@@ -522,6 +545,11 @@ class ReviewRequestResource(WebAPIResource):
         try:
             review_request = ReviewRequest.objects.create(
                 user, repository, commit_id, local_site)
+
+            if extra_fields:
+                self._import_extra_data(review_request.extra_data,
+                                        extra_fields)
+                review_request.save(update_fields=['extra_data'])
 
             return 201, {
                 self.item_result_key: review_request
@@ -597,9 +625,10 @@ class ReviewRequestResource(WebAPIResource):
                                'submitted or discarded.',
             },
         },
+        allow_unknown=True
     )
     def update(self, request, status=None, changenum=None, commit_id=None,
-               description=None, *args, **kwargs):
+               description=None, extra_fields={}, *args, **kwargs):
         """Updates the status of the review request.
 
         The only supported update to a review request's resource is to change
@@ -618,6 +647,11 @@ class ReviewRequestResource(WebAPIResource):
         list of reviewers, is made on the Review Request Draft resource.
         This can be accessed through the ``draft`` link. Only when that
         draft is published will the changes end up back in this resource.
+
+        Extra data can be stored on the review request for later lookup by
+        passing ``extra_data.key_name=value``. The ``key_name`` and ``value``
+        can be any valid strings. Passing a blank ``value`` will remove the
+        key. The ``extra_data.`` prefix is required.
         """
         try:
             review_request = \
@@ -625,7 +659,13 @@ class ReviewRequestResource(WebAPIResource):
         except ObjectDoesNotExist:
             return DOES_NOT_EXIST
 
-        if ((changenum is not None and
+        is_mutating_field = (
+            changenum is not None or
+            commit_id is not None or
+            extra_fields
+        )
+
+        if ((is_mutating_field and
              not self.has_modify_permissions(request, review_request)) or
             (status is not None and
              not review_request.is_status_mutable_by(request.user))):
@@ -666,6 +706,10 @@ class ReviewRequestResource(WebAPIResource):
 
             draft.save()
             review_request.reopen()
+
+        if extra_fields:
+            self._import_extra_data(review_request.extra_data, extra_fields)
+            review_request.save(update_fields=['extra_data'])
 
         return 200, {
             self.item_result_key: review_request,

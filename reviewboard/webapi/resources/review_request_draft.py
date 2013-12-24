@@ -39,9 +39,13 @@ class ReviewRequestDraftResource(MarkdownFieldsMixin, WebAPIResource):
     request, or it must have the ``reviews.can_edit_reviewrequest`` permission
     set.
 
-    If the ``rich_text`` field is set to true, then the ``changedescription``,
-    ``description`` and ``testing_done`` fields should be interpreted
-    by the client as Markdown text.
+    If the ``text_type`` field is set to ``markdown``, then the
+    ``changedescription``, ``description`` and ``testing_done`` fields
+    should be interpreted by the client as Markdown text.
+
+    The returned text in the payload can be provided in a different format
+    by passing ``?force-text-type=`` in the request. This accepts all the
+    possible values listed in the ``text_type`` field below.
     """
     model = ReviewRequestDraft
     name = 'draft'
@@ -92,18 +96,17 @@ class ReviewRequestDraftResource(MarkdownFieldsMixin, WebAPIResource):
             'type': six.text_type,
             'description': 'The new review request description.',
         },
+        'extra_data': {
+            'type': dict,
+            'description': 'Extra data as part of the draft. '
+                           'This can be set by the API or extensions.',
+        },
         'public': {
             'type': bool,
             'description': 'Whether or not the draft is public. '
                            'This will always be false up until the time '
                            'it is first made public. At that point, the '
                            'draft is deleted.',
-        },
-        'rich_text': {
-            'type': bool,
-            'description': 'Whether or not the review request description, '
-                           'testing_done and changedescription fields are '
-                           'in rich-text (Markdown) format.',
         },
         'summary': {
             'type': six.text_type,
@@ -122,6 +125,11 @@ class ReviewRequestDraftResource(MarkdownFieldsMixin, WebAPIResource):
         'testing_done': {
             'type': six.text_type,
             'description': 'The new testing done text.',
+        },
+        'text_type': {
+            'type': MarkdownFieldsMixin.TEXT_TYPES,
+            'description': 'The mode for the review request description '
+                           'and testing_done fields.',
         },
     }
 
@@ -151,7 +159,7 @@ class ReviewRequestDraftResource(MarkdownFieldsMixin, WebAPIResource):
 
     def serialize_changedescription_field(self, obj, **kwargs):
         if obj.changedesc:
-            return obj.changedesc.text
+            return self.normalize_text(obj, obj.changedesc.text, **kwargs)
         else:
             return ''
 
@@ -160,6 +168,12 @@ class ReviewRequestDraftResource(MarkdownFieldsMixin, WebAPIResource):
 
     def serialize_public_field(self, obj, **kwargs):
         return False
+
+    def serialize_description_field(self, obj, **kwargs):
+        return self.normalize_text(obj, obj.description, **kwargs)
+
+    def serialize_testing_done_field(self, obj, **kwargs):
+        return self.normalize_text(obj, obj.testing_done, **kwargs)
 
     def has_access_permissions(self, request, draft, *args, **kwargs):
         return draft.is_accessible_by(request.user)
@@ -201,13 +215,6 @@ class ReviewRequestDraftResource(MarkdownFieldsMixin, WebAPIResource):
                                'If a review is public, it cannot be made '
                                'private again.',
             },
-            'rich_text': {
-                'type': bool,
-                'description': 'Whether or not the review request '
-                               'description, testing_done and '
-                               'changedescription fields are in rich-text '
-                               '(Markdown) format.',
-            },
             'summary': {
                 'type': six.text_type,
                 'description': 'The new review request summary.',
@@ -226,7 +233,14 @@ class ReviewRequestDraftResource(MarkdownFieldsMixin, WebAPIResource):
                 'type': six.text_type,
                 'description': 'The new testing done text.',
             },
+            'text_type': {
+                'type': MarkdownFieldsMixin.SAVEABLE_TEXT_TYPES,
+                'description': 'The mode for the review request description '
+                               'and testing_done fields. the default is '
+                               '"plain".',
+            },
         },
+        allow_unknown=True
     )
     def create(self, *args, **kwargs):
         """Creates a draft of a review request.
@@ -236,15 +250,15 @@ class ReviewRequestDraftResource(MarkdownFieldsMixin, WebAPIResource):
         All fields from the review request will be copied over to the draft,
         unless overridden in the request.
 
-        If ``rich_text`` is provided and changed to true, then the
+        If ``text_type`` is provided and set to ``markdown``, then the
         ``changedescription``, ``description`` and ``testing_done`` fields
-        will be set to be interpreted as Markdown. When setting to true and not
-        specifying any new text, the existing text from the review request
-        will be escaped so as not to be unintentionally interpreted as
-        Markdown.
+        will be set to be interpreted as Markdown. Otherwise, it will be
+        interpreted as plain text.
 
-        If ``rich_text`` is changed to false, and new text is not provided,
-        the existing text from the review request will be unescaped.
+        Extra data can be stored on the review request for later lookup by
+        passing ``extra_data.key_name=value``. The ``key_name`` and ``value``
+        can be any valid strings. Passing a blank ``value`` will remove the
+        key.  The ``extra_data.`` prefix is required.
         """
         # A draft is a singleton. Creating and updating it are the same
         # operations in practice.
@@ -288,13 +302,6 @@ class ReviewRequestDraftResource(MarkdownFieldsMixin, WebAPIResource):
                                'review request, and the old draft will be '
                                'deleted.',
             },
-            'rich_text': {
-                'type': bool,
-                'description': 'Whether or not the review request '
-                               'description, testing_done and '
-                               'changedescription fields are in rich-text '
-                               '(Markdown) format.',
-            },
             'summary': {
                 'type': six.text_type,
                 'description': 'The new review request summary.',
@@ -313,10 +320,17 @@ class ReviewRequestDraftResource(MarkdownFieldsMixin, WebAPIResource):
                 'type': six.text_type,
                 'description': 'The new testing done text.',
             },
+            'text_type': {
+                'type': MarkdownFieldsMixin.SAVEABLE_TEXT_TYPES,
+                'description': 'The mode for the review request description '
+                               'and testing_done fields. the default is '
+                               'to leave the mode unchanged.',
+            },
         },
+        allow_unknown=True
     )
     def update(self, request, always_save=False, local_site_name=None,
-               *args, **kwargs):
+               extra_fields={}, *args, **kwargs):
         """Updates a draft of a review request.
 
         This will update the draft with the newly provided data.
@@ -328,14 +342,21 @@ class ReviewRequestDraftResource(MarkdownFieldsMixin, WebAPIResource):
         (such as an e-mail) if configured on the server. The current draft will
         then be deleted.
 
-        If ``rich_text`` is provided and changed to true, then the
-        ``changedescription``, ``description`` and ``testing_done`` fields
-        will be set to be interpreted as Markdown. When setting to true and not
-        specifying any new text, the existing text will be escaped so as not to
-        be unintentionally interpreted as Markdown.
+        If ``text_type`` is provided and changed from the original value,
+        then the ``changedescription``, ``description`` and ``testing_done``
+        fields will be set to be interpreted according to the new type.
 
-        If ``rich_text`` is changed to false, and new text is not provided,
-        the existing text will be unescaped.
+        When setting to ``markdown`` and not specifying any new text, the
+        existing text will be escaped so as not to be unintentionally
+        interpreted as Markdown.
+
+        When setting to ``plain``, and new text is not provided, the existing
+        text will be unescaped.
+
+        Extra data can be stored on the review request for later lookup by
+        passing ``extra_data.key_name=value``. The ``key_name`` and ``value``
+        can be any valid strings. Passing a blank ``value`` will remove the
+        key. The ``extra_data.`` prefix is required.
         """
         try:
             review_request = resources.review_request.get_object(
@@ -372,8 +393,9 @@ class ReviewRequestDraftResource(MarkdownFieldsMixin, WebAPIResource):
             changedesc = draft.changedesc
             modified_objects.append(draft.changedesc)
 
-            if 'rich_text' in kwargs:
-                changedesc.rich_text = kwargs['rich_text']
+            if 'text_type' in kwargs:
+                changedesc.rich_text = \
+                    (kwargs['text_type'] == self.TEXT_TYPE_MARKDOWN)
 
             self.normalize_markdown_fields(changedesc, ['changedescription'],
                                            old_changedesc_rich_text,
@@ -384,6 +406,8 @@ class ReviewRequestDraftResource(MarkdownFieldsMixin, WebAPIResource):
 
         self.normalize_markdown_fields(draft, ['description', 'testing_done'],
                                        old_rich_text, **kwargs)
+
+        self._import_extra_data(draft.extra_data, extra_fields)
 
         if always_save or not invalid_fields:
             for obj in set(modified_objects):
@@ -502,6 +526,8 @@ class ReviewRequestDraftResource(MarkdownFieldsMixin, WebAPIResource):
                 draft.changedesc.text = data
 
                 modified_objects.append(draft.changedesc)
+        elif field_name == 'text_type':
+            draft.rich_text = (data == self.TEXT_TYPE_MARKDOWN)
         else:
             if field_name == 'summary' and '\n' in data:
                 invalid_entries.append('Summary cannot contain newlines')

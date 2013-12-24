@@ -23,8 +23,12 @@ class ReviewScreenshotCommentResource(BaseScreenshotCommentResource):
     changed on this list. However, if the review is already published,
     then no changes can be made.
 
-    If the ``rich_text`` field is set to true, then ``text`` should be
-    interpreted by the client as Markdown text.
+    If the ``text_type`` field is set to ``markdown``, then the ``text``
+    field should be interpreted by the client as Markdown text.
+
+    The returned text in the payload can be provided in a different format
+    by passing ``?force-text-type=`` in the request. This accepts all the
+    possible values listed in the ``text_type`` field below.
     """
     allowed_methods = ('GET', 'POST', 'PUT', 'DELETE')
     model_parent_key = 'review'
@@ -37,7 +41,7 @@ class ReviewScreenshotCommentResource(BaseScreenshotCommentResource):
     @webapi_check_local_site
     @webapi_login_required
     @webapi_request_fields(
-        required={
+        required=dict({
             'screenshot_id': {
                 'type': int,
                 'description': 'The ID of the screenshot being commented on.',
@@ -58,22 +62,8 @@ class ReviewScreenshotCommentResource(BaseScreenshotCommentResource):
                 'type': int,
                 'description': 'The height of the comment region.',
             },
-            'text': {
-                'type': six.text_type,
-                'description': 'The comment text.',
-            },
-        },
-        optional={
-            'issue_opened': {
-                'type': bool,
-                'description': 'Whether or not the comment opens an issue.',
-            },
-            'rich_text': {
-                'type': bool,
-                'description': 'Whether the comment text is in rich-text '
-                               '(Markdown) format. The default is false.',
-            },
-        },
+        }, **BaseScreenshotCommentResource.REQUIRED_CREATE_FIELDS),
+        optional=BaseScreenshotCommentResource.OPTIONAL_CREATE_FIELDS,
         allow_unknown=True,
     )
     def create(self, request, screenshot_id, *args, **kwargs):
@@ -83,8 +73,9 @@ class ReviewScreenshotCommentResource(BaseScreenshotCommentResource):
         The comment contains text and dimensions for the area being commented
         on.
 
-        If ``rich_text`` is provided and set to true, then the the ``text``
-        field is expected to be in valid Markdown format.
+        If ``text_type`` is provided and set to ``markdown``, then the ``text``
+        field will be set to be interpreted as Markdown. Otherwise, it will be
+        interpreted as plain text.
         """
         try:
             review_request = \
@@ -121,7 +112,7 @@ class ReviewScreenshotCommentResource(BaseScreenshotCommentResource):
     @webapi_login_required
     @webapi_response_errors(DOES_NOT_EXIST, NOT_LOGGED_IN, PERMISSION_DENIED)
     @webapi_request_fields(
-        optional={
+        optional=dict({
             'x': {
                 'type': int,
                 'description': 'The X location for the comment.',
@@ -138,24 +129,7 @@ class ReviewScreenshotCommentResource(BaseScreenshotCommentResource):
                 'type': int,
                 'description': 'The height of the comment region.',
             },
-            'text': {
-                'type': six.text_type,
-                'description': 'The comment text.',
-            },
-            'issue_opened': {
-                'type': bool,
-                'description': 'Whether or not the comment opens an issue.',
-            },
-            'issue_status': {
-                'type': ('dropped', 'open', 'resolved'),
-                'description': 'The status of an open issue.',
-            },
-            'rich_text': {
-                'type': bool,
-                'description': 'Whether the comment text is in rich-text '
-                               '(Markdown) format. The default is false.',
-            },
-        },
+        }, **BaseScreenshotCommentResource.OPTIONAL_UPDATE_FIELDS),
         allow_unknown=True
     )
     def update(self, request, *args, **kwargs):
@@ -164,13 +138,16 @@ class ReviewScreenshotCommentResource(BaseScreenshotCommentResource):
         This can update the text or region of an existing comment. It
         can only be done for comments that are part of a draft review.
 
-        If ``rich_text`` is provided and changed to true, then the ``text``
-        field will be set to be interpreted as Markdown. When setting to true
-        and not specifying any new text, the existing text will be escaped so
-        as not to be unintentionally interpreted as Markdown.
+        If ``text_type`` is provided and changed from the original value, then
+        the ``text`` field will be set to be interpreted according to the new
+        type.
 
-        If ``rich_text`` is changed to false, and new text is not provided,
-        the existing text will be unescaped.
+        When setting to ``markdown`` and not specifying any new text, the
+        existing text will be escaped so as not to be unintentionally
+        interpreted as Markdown.
+
+        When setting to ``plain``, and new text is not provided, the existing
+        text will be unescaped.
         """
         try:
             resources.review_request.get_object(request, *args, **kwargs)

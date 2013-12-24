@@ -25,8 +25,12 @@ class ReviewReplyDiffCommentResource(BaseDiffCommentResource):
     changed on this list. However, if the reply is already published,
     then no changed can be made.
 
-    If the ``rich_text`` field is set to true, then ``text`` should be
-    interpreted by the client as Markdown text.
+    If the ``text_type`` field is set to ``markdown``, then the ``text``
+    field should be interpreted by the client as Markdown text.
+
+    The returned text in the payload can be provided in a different format
+    by passing ``?force-text-type=`` in the request. This accepts all the
+    possible values listed in the ``text_type`` field below.
     """
     allowed_methods = ('GET', 'POST', 'PUT', 'DELETE')
     model_parent_key = 'review'
@@ -51,23 +55,8 @@ class ReviewReplyDiffCommentResource(BaseDiffCommentResource):
     @webapi_response_errors(DOES_NOT_EXIST, INVALID_FORM_DATA,
                             NOT_LOGGED_IN, PERMISSION_DENIED)
     @webapi_request_fields(
-        required={
-            'reply_to_id': {
-                'type': int,
-                'description': 'The ID of the comment being replied to.',
-            },
-            'text': {
-                'type': six.text_type,
-                'description': 'The comment text.',
-            },
-        },
-        optional={
-            'rich_text': {
-                'type': bool,
-                'description': 'Whether the comment text is in rich-text '
-                               '(Markdown) format. The default is false.',
-            },
-        }
+        required=BaseDiffCommentResource.REPLY_REQUIRED_CREATE_FIELDS,
+        optional=BaseDiffCommentResource.REPLY_OPTIONAL_CREATE_FIELDS
     )
     def create(self, request, reply_to_id, *args, **kwargs):
         """Creates a new reply to a diff comment on the parent review.
@@ -75,8 +64,9 @@ class ReviewReplyDiffCommentResource(BaseDiffCommentResource):
         This will create a new diff comment as part of this reply. The reply
         must be a draft reply.
 
-        If ``rich_text`` is provided and set to true, then the the ``text``
-        field is expected to be in valid Markdown format.
+        If ``text_type`` is provided and set to ``markdown``, then the ``text``
+        field will be set to be interpreted as Markdown. Otherwise, it will be
+        interpreted as plain text.
         """
         try:
             resources.review_request.get_object(request, *args, **kwargs)
@@ -135,17 +125,7 @@ class ReviewReplyDiffCommentResource(BaseDiffCommentResource):
     @webapi_login_required
     @webapi_response_errors(DOES_NOT_EXIST, NOT_LOGGED_IN, PERMISSION_DENIED)
     @webapi_request_fields(
-        optional={
-            'rich_text': {
-                'type': bool,
-                'description': 'Whether the comment text is in rich-text '
-                               '(Markdown) format. The default is false.',
-            },
-            'text': {
-                'type': six.text_type,
-                'description': 'The new comment text.',
-            },
-        },
+        optional=BaseDiffCommentResource.REPLY_OPTIONAL_UPDATE_FIELDS
     )
     def update(self, request, *args, **kwargs):
         """Updates a reply to a diff comment.
@@ -153,13 +133,16 @@ class ReviewReplyDiffCommentResource(BaseDiffCommentResource):
         This can only update the text in the comment. The comment being
         replied to cannot change.
 
-        If ``rich_text`` is provided and changed to true, then the ``text``
-        field will be set to be interpreted as Markdown. When setting to true
-        and not specifying any new text, the existing text will be escaped so
-        as not to be unintentionally interpreted as Markdown.
+        If ``text_type`` is provided and changed from the original value, then
+        the ``text`` field will be set to be interpreted according to the new
+        type.
 
-        If ``rich_text`` is changed to false, and new text is not provided,
-        the existing text will be unescaped.
+        When setting to ``markdown`` and not specifying any new text, the
+        existing text will be escaped so as not to be unintentionally
+        interpreted as Markdown.
+
+        When setting to ``plain``, and new text is not provided, the existing
+        text will be unescaped.
         """
         try:
             resources.review_request.get_object(request, *args, **kwargs)
